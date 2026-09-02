@@ -26,7 +26,7 @@
   nav button{flex:1;font-family:inherit;font-size:13px;padding:8px 4px;border:1px solid var(--line);
              background:#fff;border-radius:6px;cursor:pointer;color:var(--sub)}
   nav button.on{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
-  .wrap{padding:12px 14px 60px;max-width:760px;margin:0 auto}
+  .wrap{padding:12px 14px 88px;max-width:760px;margin:0 auto}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px}
   .panel h2{font-size:13px;margin:0 0 10px;color:var(--sub);font-weight:700}
   button{font-family:inherit;font-size:13px;padding:8px 14px;border:1px solid var(--line);
@@ -42,7 +42,7 @@
   .row{display:flex;gap:8px;flex-wrap:wrap}
   .row>div{flex:1;min-width:120px}
   .hide{display:none!important}
-  /* プレビュー枠は画面高に収める（操作ボタンが画面外に出ないように） */
+  /* 撮影 */
   .stage{position:relative;background:#111;border-radius:8px;overflow:hidden;aspect-ratio:3/4;
          max-height:46vh;max-width:calc(46vh * 0.75);margin:0 auto;
          display:flex;align-items:center;justify-content:center}
@@ -54,16 +54,38 @@
   .bar{height:6px;background:var(--line2);border-radius:3px;overflow:hidden;margin-top:8px}
   .bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
   .stat{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6}
+  /* 支出/収入/振替の切り替え */
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+              padding:9px 4px;border:1px solid var(--line);background:#fff;border-radius:8px;color:var(--sub)}
+  .seg button span{font-size:11px;font-weight:700}
+  .seg button b{font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .seg button.on{border-color:var(--accent);background:#eff4ff}
+  .seg button.on span{color:var(--accent)}
+  .seg.sm button{flex-direction:row;padding:8px 4px;font-size:13px}
+  .seg.sm button.on{font-weight:700}
+  /* 一覧 */
   .day{font-size:12px;color:var(--sub);font-weight:700;margin:14px 0 6px;
        border-bottom:1px solid var(--line2);padding-bottom:4px}
   .item{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line2);cursor:pointer}
   .item:hover{background:#f8fafc}
   .tag{font-size:11px;padding:3px 7px;border-radius:999px;color:#fff;white-space:nowrap;font-weight:700}
   .item .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .item .am{font-weight:700;font-variant-numeric:tabular-nums}
+  .item .sub{color:var(--sub);font-size:11px}
+  .item .am{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .plus{color:var(--ok)}
   .tot{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0}
   .tot .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
   .empty{color:var(--sub);text-align:center;padding:28px 10px;font-size:13px;line-height:1.9}
+  /* 残高 */
+  .bal{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line2)}
+  .bal .nm{display:flex;align-items:center;gap:8px;min-width:0}
+  .bal .v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bal.sum{border-bottom:none;border-top:2px solid var(--line);margin-top:4px;padding-top:10px}
+  .bal.sum .v{font-size:20px}
+  .neg{color:var(--out)}
+  .kind{font-size:11px;color:var(--sub);font-weight:700;margin:12px 0 2px}
+  /* グラフ凡例 */
   .legend{margin-top:10px}
   .lg{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
   .lg .sw{width:12px;height:12px;border-radius:3px;flex:none}
@@ -72,6 +94,7 @@
   .lg .p{color:var(--sub);font-size:11px;width:44px;text-align:right}
   .track{height:5px;background:var(--line2);border-radius:3px;overflow:hidden;margin-top:2px}
   .track>i{display:block;height:100%;border-radius:3px}
+  /* 入力シート */
   .mask{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:60;display:flex;
         align-items:flex-end;justify-content:center}
   .sheet{background:#fff;width:100%;max-width:760px;border-radius:12px 12px 0 0;padding:16px 14px 22px;
@@ -87,6 +110,13 @@
   .catrow input[type=color]{width:38px;padding:2px;flex:none;height:34px}
   .catrow .kw{flex:2}
   .catrow .nm{flex:1;min-width:80px}
+  .catrow .num{flex:none;width:100px}
+  .catrow select{flex:none;width:110px}
+  /* 常時表示の追加ボタン */
+  .fab{position:fixed;right:16px;bottom:16px;width:58px;height:58px;border-radius:50%;
+       background:var(--accent);color:#fff;border:none;font-size:30px;line-height:1;padding:0;
+       box-shadow:0 4px 14px rgba(29,78,216,.42);z-index:50;cursor:pointer}
+  .fab:hover{background:#1a43b8}
 </style>
 </head>
 <body>
@@ -134,33 +164,44 @@
     </div>
   </div>
   <div class="panel">
-    <h2>今月の支出</h2>
-    <div class="tot"><span id="curMonthLbl">-</span><span class="v" id="curMonthAmt">¥0</span></div>
+    <h2 id="curMonthLbl">今月</h2>
+    <div class="seg">
+      <button onclick="tab('list');setMode('exp')"><span>支出</span><b id="qExp">¥0</b></button>
+      <button onclick="tab('list');setMode('inc')"><span>収入</span><b id="qInc">¥0</b></button>
+      <button onclick="tab('sum')"><span>収支</span><b id="qNet">¥0</b></button>
+    </div>
     <div class="legend" id="quickLegend"></div>
+  </div>
+  <div class="panel">
+    <h2>残高</h2>
+    <div id="quickBal"></div>
   </div>
 </section>
 
 <!-- ===== 一覧 ===== -->
 <section id="pg-list" class="hide">
   <div class="panel">
-    <div class="row">
+    <div class="row" style="margin-bottom:10px">
       <div style="flex:2"><label>対象月</label><select id="mSel" onchange="renderList()"></select></div>
-      <div><label>カテゴリ</label><select id="fSel" onchange="renderList()"></select></div>
+      <div id="fWrap"><label>カテゴリ</label><select id="fSel" onchange="renderList()"></select></div>
     </div>
-    <div class="tot" style="margin-top:10px"><span>合計 <span id="cnt" style="color:var(--sub);font-size:12px"></span></span><span class="v" id="listTot">¥0</span></div>
+    <div class="seg">
+      <button id="sg-exp" class="on" onclick="setMode('exp')"><span>支出</span><b id="totExp">¥0</b></button>
+      <button id="sg-inc" onclick="setMode('inc')"><span>収入</span><b id="totInc">¥0</b></button>
+      <button id="sg-trf" onclick="setMode('trf')"><span>振替</span><b id="totTrf">¥0</b></button>
+    </div>
   </div>
   <div class="panel">
-    <h2>明細（タップで編集）</h2>
+    <h2 id="listHead">明細（タップで編集）</h2>
     <div id="listBody"></div>
   </div>
   <div class="panel">
     <h2>データ</h2>
     <div class="row">
-      <div><button onclick="addManual()" style="width:100%">手入力で追加</button></div>
       <div><button onclick="exportCsv()" style="width:100%">CSV出力</button></div>
+      <div><button onclick="backup()" style="width:100%">バックアップ保存</button></div>
     </div>
     <div class="row" style="margin-top:8px">
-      <div><button onclick="backup()" style="width:100%">バックアップ保存</button></div>
       <div><button onclick="document.getElementById('rest').click()" style="width:100%">復元</button></div>
     </div>
     <input type="file" id="rest" accept=".json" class="hide" onchange="restore(event)">
@@ -170,19 +211,25 @@
 <!-- ===== 集計 ===== -->
 <section id="pg-sum" class="hide">
   <div class="panel">
+    <h2>現在の残高</h2>
+    <div id="balBody"></div>
+  </div>
+  <div class="panel">
     <div class="row">
       <div><label>対象月</label><select id="sSel" onchange="renderSum()"></select></div>
     </div>
-    <div class="tot" style="margin-top:10px"><span>支出合計</span><span class="v" id="sumTot">¥0</span></div>
+    <div class="tot" style="margin-top:10px"><span>収入</span><span class="v plus" id="sumInc">¥0</span></div>
+    <div class="tot"><span>支出</span><span class="v" id="sumTot">¥0</span></div>
+    <div class="tot"><span>収支</span><span class="v" id="sumNet">¥0</span></div>
     <div class="stat" id="sumDiff"></div>
   </div>
   <div class="panel">
-    <h2>カテゴリ別</h2>
+    <h2>支出のカテゴリ別</h2>
     <canvas id="donut" height="260" style="width:100%"></canvas>
     <div class="legend" id="sumLegend"></div>
   </div>
   <div class="panel">
-    <h2>月別推移（直近12ヶ月）</h2>
+    <h2>月別推移（直近12ヶ月・支出）</h2>
     <canvas id="trend" height="220" style="width:100%"></canvas>
   </div>
 </section>
@@ -190,7 +237,16 @@
 <!-- ===== 設定 ===== -->
 <section id="pg-set" class="hide">
   <div class="panel">
-    <h2>カテゴリと自動仕分けキーワード</h2>
+    <h2>口座（現金・銀行・電子マネー）</h2>
+    <div id="accEdit"></div>
+    <div class="row" style="margin-top:8px">
+      <div><button onclick="addAcc()" style="width:100%">口座を追加</button></div>
+      <div><button class="pri" onclick="saveAccs()" style="width:100%">保存</button></div>
+    </div>
+    <div class="note">「初期残高」は、この家計簿を使い始めた時点の残高です。ここに実際の残高を入れると、以降の入出金を反映した現在残高が集計タブに表示されます。</div>
+  </div>
+  <div class="panel">
+    <h2>支出カテゴリと自動仕分けキーワード</h2>
     <div id="catEdit"></div>
     <div class="row" style="margin-top:8px">
       <div><button onclick="addCat()" style="width:100%">カテゴリを追加</button></div>
@@ -199,14 +255,22 @@
     <div class="note">キーワードは「,」区切り。レシートの店名や商品名に含まれていると自動でそのカテゴリになります。一覧で手動修正すると、その店名を記憶して次回から優先します。</div>
   </div>
   <div class="panel">
+    <h2>収入カテゴリ</h2>
+    <div id="icatEdit"></div>
+    <div class="row" style="margin-top:8px">
+      <div><button onclick="addICat()" style="width:100%">カテゴリを追加</button></div>
+      <div><button class="pri" onclick="saveICats()" style="width:100%">保存</button></div>
+    </div>
+  </div>
+  <div class="panel">
     <h2>記憶した店名 → カテゴリ</h2>
     <div id="memList"></div>
   </div>
   <div class="panel">
     <h2>OCRについて</h2>
     <div class="note">
-      文字認識には Tesseract.js（日本語）をネット経由で読み込みます。初回のみ辞書データのダウンロードで数十秒かかることがあります。<br>
-      オフライン時や読み取りに失敗した場合も、金額・店名を手入力して保存できます。
+      文字認識には Tesseract.js（日本語）を使用します。初回のみ辞書データのダウンロードで数十秒かかります。
+      一度読み込めば、以降はオフラインでも動作します。
     </div>
     <div class="row" style="margin-top:8px">
       <div><button class="danger" onclick="clearAll()" style="width:100%">全データを削除</button></div>
@@ -216,22 +280,37 @@
 
 </div>
 
-<!-- ===== 編集シート ===== -->
+<button class="fab" id="fab" onclick="addManual()" title="手入力で追加">＋</button>
+
+<!-- ===== 入力シート ===== -->
 <div class="mask hide" id="mask" onclick="if(event.target===this)closeSheet()">
   <div class="sheet">
     <h3 id="shTitle">明細の確認</h3>
+    <div class="fg"><div class="seg sm" id="typeSel"></div></div>
     <div class="row">
       <div class="fg"><label>日付</label><input type="date" id="fDate"></div>
       <div class="fg"><label>金額（円）</label><input type="number" id="fAmt" inputmode="numeric"></div>
     </div>
     <div class="fg hide" id="amtWrap"><label>読み取れた金額の候補（タップで入力）</label>
       <div class="catgrid" id="amtCands"></div></div>
-    <div class="fg"><label>店名</label>
-      <input type="text" id="fShop" list="shopList" autocomplete="off">
-      <datalist id="shopList"></datalist></div>
-    <div class="fg hide" id="shopWrap"><label id="shopLbl">店名の候補（タップで入力）</label>
-      <div class="catgrid" id="shopCands"></div></div>
-    <div class="fg"><label>カテゴリ</label><div class="catgrid" id="fCats"></div></div>
+
+    <div id="nameBlk">
+      <div class="fg"><label id="nameLbl">店名</label>
+        <input type="text" id="fShop" list="shopList" autocomplete="off">
+        <datalist id="shopList"></datalist></div>
+      <div class="fg hide" id="shopWrap"><label id="shopLbl">店名の候補（タップで入力）</label>
+        <div class="catgrid" id="shopCands"></div></div>
+      <div class="fg"><label>カテゴリ</label><div class="catgrid" id="fCats"></div></div>
+      <div class="fg"><label id="acctLbl">支払元</label><select id="fAcct"></select></div>
+    </div>
+
+    <div id="trfBlk" class="hide">
+      <div class="row">
+        <div class="fg"><label>振替元</label><select id="fFrom"></select></div>
+        <div class="fg"><label>振替先</label><select id="fTo"></select></div>
+      </div>
+    </div>
+
     <div class="fg"><label>メモ</label><input type="text" id="fMemo"></div>
     <div class="fg" id="ocrWrap"><label>読み取り結果（修正可）</label><textarea id="fOcr" class="ocrbox"></textarea></div>
     <div class="row" style="margin-top:14px">
@@ -244,7 +323,9 @@
 
 <script>
 /* ============ 保存領域 ============ */
-var K_REC='kakeibo_recs', K_CAT='kakeibo_cats', K_MEM='kakeibo_shopmem';
+var K_REC='kakeibo_recs', K_CAT='kakeibo_cats', K_MEM='kakeibo_shopmem',
+    K_ACC='kakeibo_accounts', K_ICAT='kakeibo_incats';
+
 var DEFAULT_CATS=[
  {n:'食費',c:'#e11d48',k:'スーパー,マート,イオン,ライフ,西友,マルエツ,サミット,オーケー,業務スーパー,まいばすけっと,コープ,精肉,鮮魚,青果,弁当,パン,牛乳,惣菜,セブン,ローソン,ファミリーマート,ミニストップ'},
  {n:'外食',c:'#f59e0b',k:'マクドナルド,スターバックス,ドトール,タリーズ,コメダ,サイゼリヤ,ガスト,吉野家,すき家,松屋,ラーメン,レストラン,カフェ,居酒屋,寿司,焼肉,cafe'},
@@ -256,14 +337,43 @@ var DEFAULT_CATS=[
  {n:'光熱通信',c:'#0f766e',k:'電力,電気,ガス,水道,ドコモ,docomo,au,ソフトバンク,楽天モバイル,通信,NTT'},
  {n:'その他',c:'#64748b',k:''}
 ];
+var DEFAULT_ICATS=[
+ {n:'給与',c:'#0f766e'},{n:'賞与',c:'#0ea5e9'},{n:'副収入',c:'#8b5cf6'},
+ {n:'臨時収入',c:'#f59e0b'},{n:'その他',c:'#64748b'}
+];
+var DEFAULT_ACCS=[
+ {id:'cash', n:'現金',      k:'現金',      c:'#0f766e', init:0},
+ {id:'bank', n:'銀行口座',  k:'銀行',      c:'#1d4ed8', init:0},
+ {id:'emny', n:'電子マネー',k:'電子マネー',c:'#b45309', init:0}
+];
+var KINDS=['現金','銀行','電子マネー'];
+
 function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){alert('保存できませんでした（容量超過の可能性）')}}
-var recs=load(K_REC,[]), cats=load(K_CAT,DEFAULT_CATS), mem=load(K_MEM,{});
+
+var recs=load(K_REC,[]), cats=load(K_CAT,DEFAULT_CATS), mem=load(K_MEM,{}),
+    accs=load(K_ACC,DEFAULT_ACCS), icats=load(K_ICAT,DEFAULT_ICATS);
+
 function yen(n){return '¥'+(n||0).toLocaleString('ja-JP')}
+function signed(n){return (n<0?'-¥':'¥')+Math.abs(n||0).toLocaleString('ja-JP')}
 function catOf(n){for(var i=0;i<cats.length;i++)if(cats[i].n===n)return cats[i];return cats[cats.length-1]}
+function icatOf(n){for(var i=0;i<icats.length;i++)if(icats[i].n===n)return icats[i];return icats[icats.length-1]}
+function accOf(id){for(var i=0;i<accs.length;i++)if(accs[i].id===id)return accs[i];return null}
+function accName(id){var a=accOf(id);return a?a.n:'(削除された口座)'}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function esc(s){return (s||'').replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+
+/* 旧バージョンの明細（種別・口座なし）を今の形に合わせる */
+(function migrate(){
+  var changed=false;
+  if(!accs.length){accs=DEFAULT_ACCS.slice();save(K_ACC,accs)}
+  recs.forEach(function(r){
+    if(!r.type){r.type='exp';changed=true}
+    if(r.type!=='trf'&&!r.acct){r.acct=accs[0].id;changed=true}
+  });
+  if(changed)save(K_REC,recs);
+})();
 
 /* ============ タブ ============ */
 function tab(id){
@@ -280,8 +390,6 @@ function tab(id){
 
 /* ============ カメラ ============ */
 var stream=null;
-/* ライブ映像(getUserMedia)は https か localhost でしか使えない。
-   LAN経由(http://192.168.x.x)やスマホでは、端末のカメラアプリを呼ぶ方式に切り替える。 */
 function setupCamUi(){
   var live=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&window.isSecureContext;
   var touch=false;
@@ -297,9 +405,10 @@ function setupCamUi(){
   }
 }
 setupCamUi();
+
 function startCam(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-    setStat('このブラウザではカメラを使えません。「画像を選ぶ」をお使いください。');return;
+    setStat('このブラウザではカメラを使えません。「アルバムから選ぶ」をお使いください。');return;
   }
   navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920}}})
   .then(function(s){
@@ -314,7 +423,7 @@ function startCam(){
     setStat('レシート全体が画面に入るように写してください。');
   })
   .catch(function(e){
-    setStat('カメラを起動できませんでした（'+e.name+'）。ファイルを直接開いている場合はカメラが制限されます。「画像を選ぶ」からアルバムの写真を読み込めます。');
+    setStat('カメラを起動できませんでした（'+e.name+'）。「レシートを撮影」からもお試しください。');
   });
 }
 function stopCam(){
@@ -366,7 +475,7 @@ function setBar(p){
    レシートは照明ムラが大きく感熱紙の印字も薄いため、画像全体を一律に補正すると
    明るい側が飛び、暗い側が潰れる。各画素の周囲だけを見て閾値を決める方式にする。 */
 function preprocess(cv){
-  var MAX=1900;                                   /* 精度と処理時間の折り合い */
+  var MAX=1900;
   var sc=Math.min(1,MAX/Math.max(cv.width,cv.height));
   var o=document.createElement('canvas');
   var W=Math.max(1,Math.round(cv.width*sc)), H=Math.max(1,Math.round(cv.height*sc));
@@ -379,8 +488,6 @@ function preprocess(cv){
   for(i=0,p=0;p<gray.length;i+=4,p++){
     gray[p]=(0.299*a[i]+0.587*a[i+1]+0.114*a[i+2])|0;
   }
-
-  /* 積分画像（各画素までの輝度の累積和）を作り、任意の矩形の合計を定数時間で求める */
   var IW=W+1, integ=new Uint32Array(IW*(H+1)), rowsum;
   for(y=0;y<H;y++){
     rowsum=0;
@@ -389,9 +496,8 @@ function preprocess(cv){
       integ[(y+1)*IW+(x+1)]=integ[y*IW+(x+1)]+rowsum;
     }
   }
-
-  var half=Math.max(8,Math.round(Math.min(W,H)/24));   /* 参照する周囲の広さ */
-  var T=0.13;                                          /* 周囲平均より何%暗ければ文字とみなすか */
+  var half=Math.max(8,Math.round(Math.min(W,H)/24));
+  var T=0.13;
   var y1,y2,x1,x2,cnt,sum,q;
   for(y=0;y<H;y++){
     y1=y-half; if(y1<0)y1=0;
@@ -424,7 +530,6 @@ function loadTess(){
   });
   return tessReady;
 }
-/* ワーカーは使い回す。2枚目以降は日本語データの読み込みが不要になり大幅に速くなる */
 var tWorker=null, onProgress=null;
 function tessLog(m){
   if(!onProgress)return;
@@ -440,7 +545,6 @@ function getWorker(){
   return loadTess().then(function(){
     return Tesseract.createWorker('jpn',1,{logger:tessLog});
   }).then(function(w){
-    /* レシートは1列の文字ブロック。既定の自動判定より安定する */
     return w.setParameters({
       tessedit_pageseg_mode:'6',
       preserve_interword_spaces:'1'
@@ -450,7 +554,7 @@ function getWorker(){
 function runOcr(cv){
   setBar(0.03); setStat('画像を処理しています…');
   onProgress=true;
-  setTimeout(function(){                       /* 前処理が重いので画面表示を先に更新 */
+  setTimeout(function(){
     var img;
     try{ img=preprocess(cv) }catch(e){ img=cv }
     setBar(0.15); setStat('文字認識の準備中…');
@@ -464,7 +568,6 @@ function runOcr(cv){
         '読み取り完了。内容を確認して保存してください。');
       finishOcr(t);
     }).catch(function(e){
-      /* ワーカー方式が使えない環境では従来方式で再試行 */
       if(window.Tesseract&&Tesseract.recognize){
         Tesseract.recognize(img,'jpn',{logger:tessLog}).then(function(r){
           setBar(1); setStat('読み取り完了。内容を確認して保存してください。');
@@ -483,14 +586,14 @@ function runOcr(cv){
 function finishOcr(text){
   setTimeout(function(){setBar(null)},900);
   var p=parseReceipt(text);
-  var known=matchKnownShop(text);        /* 過去に確定した店名に自動で置き換える */
+  var known=matchKnownShop(text);
   if(known)p.shop=known;
-  openSheet({id:null,date:p.date,amount:p.amount,shop:p.shop,
-             cat:guessCat((known||p.shop)+' '+text),memo:'',ocr:text});
+  openSheet({id:null,type:'exp',date:p.date,amount:p.amount,shop:p.shop,
+             cat:guessCat((known||p.shop)+' '+text),acct:defaultAcct('exp'),
+             memo:'',ocr:text});
 }
 
 /* ============ レシート解析 ============ */
-/* 全角英数・半角カナを標準形に揃える（OCRは ＥＮＥＯＳ / ﾏｸﾄﾞﾅﾙﾄﾞ のような表記も返すため） */
 function z2h(s){
   s=s||'';
   try{ s=s.normalize('NFKC') }catch(e){
@@ -517,16 +620,15 @@ function findDate(t){
   if(m)return iso(new Date().getFullYear(),+m[1],+m[2]);
   return todayIso();
 }
-/* OCRが数字を似た文字に誤読することが多いので、数字らしい文字列に限って戻す */
 var DIGIT_FIX={'O':'0','o':'0','D':'0','Q':'0','l':'1','I':'1','i':'1','|':'1','!':'1',
                'S':'5','s':'5','B':'8','Z':'2','z':'2','G':'6','b':'6','g':'9','q':'9'};
 function fixDigits(s){
-  if(!/[0-9]/.test(s))return s;                    /* 数字を1つも含まない語は触らない */
+  if(!/[0-9]/.test(s))return s;
   return s.replace(/[OoDQlIi|!SsBZzGbgq]/g,function(c){return DIGIT_FIX[c]});
 }
 function num(s){
   var x=fixDigits(String(s).replace(/\s/g,''));
-  x=x.replace(/[,\.](?=\d{3}(\D|$))/g,'');         /* 桁区切りのカンマ・ピリオドを除去 */
+  x=x.replace(/[,\.](?=\d{3}(\D|$))/g,'');
   x=x.replace(/[^0-9]/g,'');
   return x?parseInt(x,10):NaN;
 }
@@ -536,7 +638,7 @@ function pickNum(L,min,max){
   if(!ms)return NaN;
   var best=NaN;
   ms.forEach(function(m){
-    if(!/[0-9]/.test(m))return;                    /* 実際の数字を含む語だけ採用 */
+    if(!/[0-9]/.test(m))return;
     var v=num(m);
     if(isNaN(v)||v<min||v>max)return;
     if(isNaN(best)||v>best)best=v;
@@ -544,18 +646,16 @@ function pickNum(L,min,max){
   return best;
 }
 function findAmount(lines){
-  /* 「合計」は誤読されやすいので、表記ゆれと部分一致を広めに拾う */
-  var strong=/合\s*[計計計]|合\s*言|お?会\s*計|お?支\s*払|支払金額|お買[上い]|お買い上げ|総\s*額|税込\s*合|クレジット\s*計/;
+  var strong=/合\s*計|お?会\s*計|お?支\s*払|支払金額|お買[上い]|お買い上げ|総\s*額|税込\s*合|クレジット\s*計/;
   var weak=/小\s*計|税\s*込|税\s*抜|^\s*計/;
   var skip=/預|釣|つり|お返し|点数|個数|ポイント|残高|前回|バーコード|割引|値引|番号|電話|TEL|登録/i;
   var i,v,L,best=NaN,weakBest=NaN,cands=[];
-
   for(i=0;i<lines.length;i++){
     L=lines[i];
     if(skip.test(L))continue;
     if(strong.test(L)){
       v=pickNum(L,1,9999999);
-      if(isNaN(v)&&i+1<lines.length)v=pickNum(lines[i+1],1,9999999);  /* 金額が次行にある形式 */
+      if(isNaN(v)&&i+1<lines.length)v=pickNum(lines[i+1],1,9999999);
       if(!isNaN(v))best=isNaN(best)?v:Math.max(best,v);
     }else if(weak.test(L)){
       v=pickNum(L,1,9999999);
@@ -565,16 +665,14 @@ function findAmount(lines){
   }
   if(!isNaN(best))return best;
   if(!isNaN(weakBest))return weakBest;
-
-  lines.forEach(function(L){                       /* 合計行が読めない時：¥付きの最大値 */
+  lines.forEach(function(L){
     if(skip.test(L))return;
     (L.match(/[¥￥]\s*[0-9OoDQlIiSsBZzGbgq][0-9OoDQlIiSsBZzGbgq,\.]{0,8}/g)||[]).forEach(function(m){
       var v=num(m); if(v>0&&v<1000000)cands.push(v);
     });
   });
   if(cands.length)return Math.max.apply(null,cands);
-
-  lines.forEach(function(L){                       /* 最後の手段：妥当な範囲の最大値 */
+  lines.forEach(function(L){
     if(skip.test(L))return;
     var v=pickNum(L,10,200000);
     if(!isNaN(v))cands.push(v);
@@ -592,9 +690,8 @@ function findShop(lines){
   }
   return '';
 }
-/* ============ 店名の学習と候補抽出 ============
-   OCRは同じ店でも毎回違う崩れ方をする。過去に確定した店名を辞書として持ち、
-   読み取り結果と部分的に似ていれば、確定済みの正しい表記に置き換える。 */
+
+/* ============ 店名の学習と候補抽出 ============ */
 function normShop(s){
   return z2h(s||'').toLowerCase().replace(/[\s　・,\.\-\(\)（）店支]/g,'');
 }
@@ -604,7 +701,7 @@ function bigrams(s){
   for(i=0;i<s.length-1;i++)a.push(s.substr(i,2));
   return a;
 }
-function dice(a,b){                                  /* 2文字組の一致度（0〜1） */
+function dice(a,b){
   var A=bigrams(a),B=bigrams(b);
   if(!A.length||!B.length)return 0;
   var m={},hit=0,i;
@@ -617,7 +714,6 @@ function knownShops(){
   for(k in mem)if(k)a.push(k);
   return a;
 }
-/* 読み取り文の先頭付近と、学習済み店名を突き合わせて一番近いものを返す */
 function matchKnownShop(text){
   var lines=z2h(text||'').split(/\r?\n/).map(function(s){return s.trim()})
             .filter(function(s){return s}).slice(0,8);
@@ -630,14 +726,15 @@ function matchKnownShop(text){
       if(s>bestScore){bestScore=s;best=name}
     });
   });
-  return bestScore>=0.5?best:null;                   /* 半分以上似ていれば同じ店とみなす */
+  return bestScore>=0.5?best:null;
 }
+var DATE_LINE=/\d{4}\s*[年\/\-\.]\s*\d{1,2}|\d{1,2}\s*[月]\s*\d{1,2}|\d{1,2}\s*:\s*\d{2}|[令RH]\s*\d{1,2}\s*年/;
 function shopCandidates(text){
   var out=[],seen={},lines=z2h(text||'').split(/\r?\n/)
     .map(function(s){return s.replace(/\s{2,}/g,' ').trim()}).filter(function(s){return s});
   var m=matchKnownShop(text);
   if(m){out.push(m);seen[m]=1}
-  knownShops().forEach(function(n){                  /* 学習済みで文中に含まれるもの */
+  knownShops().forEach(function(n){
     if(!seen[n]&&normShop(text).indexOf(normShop(n))>=0){out.push(n);seen[n]=1}
   });
   var bad=/^[\d\s\-\/:¥,\.\*]+$/;
@@ -646,16 +743,14 @@ function shopCandidates(text){
     if(out.length>=6||seen[L])return;
     if(L.length<2||L.length>24||bad.test(L)||skip.test(L))return;
     if(DATE_LINE.test(L))return;
-    if(/[\d,\.]{2,}\s*$/.test(L))return;        /* 末尾が金額の行は商品行 */
-    if(/\d+\s*-\s*\d+/.test(L))return;          /* 番地・電話番号を含む行 */
+    if(/[\d,\.]{2,}\s*$/.test(L))return;
+    if(/\d+\s*-\s*\d+/.test(L))return;
     var digits=(L.match(/[\d,\.]/g)||[]).length;
-    if(digits/L.length>0.4)return;              /* 数字が主体の行は商品行や日付 */
+    if(digits/L.length>0.4)return;
     out.push(L);seen[L]=1;
   });
   return out;
 }
-/* 日付・時刻の行。ここの数字を金額候補に混ぜない */
-var DATE_LINE=/\d{4}\s*[年\/\-\.]\s*\d{1,2}|\d{1,2}\s*[月]\s*\d{1,2}|\d{1,2}\s*:\s*\d{2}|[令RH]\s*\d{1,2}\s*年/;
 function amountCandidates(text){
   var skip=/預|釣|つり|お返し|点数|個数|ポイント|残高|前回|割引|値引|番号|電話|TEL|登録/i;
   var lines=z2h(text||'').split(/\r?\n/), vals=[], seen={};
@@ -670,10 +765,9 @@ function amountCandidates(text){
   });
   return vals.sort(function(a,b){return b-a}).slice(0,8);
 }
-
 function guessCat(text){
   var t=z2h(text).toLowerCase(), k;
-  for(k in mem){                                            /* 学習した店名を最優先 */
+  for(k in mem){
     if(k&&t.indexOf(k.toLowerCase())>=0)return mem[k];
   }
   var hit=null,pos=1e9;
@@ -687,53 +781,128 @@ function guessCat(text){
   return hit||cats[cats.length-1].n;
 }
 
-/* ============ 編集シート ============ */
-var cur=null;
+/* ============ 残高 ============ */
+function balanceOf(id){
+  var a=accOf(id), b=a?(parseInt(a.init,10)||0):0;
+  recs.forEach(function(r){
+    if(r.type==='inc'&&r.acct===id)b+=r.amount;
+    else if(r.type==='trf'){
+      if(r.from===id)b-=r.amount;
+      if(r.to===id)b+=r.amount;
+    }else if(r.type!=='inc'&&r.acct===id)b-=r.amount;   /* 支出（旧データ含む） */
+  });
+  return b;
+}
+function totalBalance(){
+  var t=0; accs.forEach(function(a){t+=balanceOf(a.id)}); return t;
+}
+function balanceHtml(){
+  if(!accs.length)return '<div class="empty">口座が登録されていません。<br>設定タブで追加してください。</div>';
+  var html='',lastKind=null;
+  KINDS.concat(['']).forEach(function(kind){
+    accs.forEach(function(a){
+      var k=(KINDS.indexOf(a.k)>=0)?a.k:'';
+      if(k!==kind)return;
+      if(kind!==lastKind){html+='<div class="kind">'+esc(kind||'その他')+'</div>';lastKind=kind}
+      var b=balanceOf(a.id);
+      html+='<div class="bal"><span class="nm"><span class="tag" style="background:'+a.c+'">'+esc(a.n)+'</span></span>'+
+            '<span class="v'+(b<0?' neg':'')+'">'+signed(b)+'</span></div>';
+    });
+  });
+  var t=totalBalance();
+  html+='<div class="bal sum"><span class="nm">合計</span><span class="v'+(t<0?' neg':'')+'">'+signed(t)+'</span></div>';
+  return html;
+}
+
+/* ============ 入力シート ============ */
+var cur=null, curAmts=[], curShops=[];
+var TYPES=[['exp','支出'],['inc','収入'],['trf','振替']];
+
+function defaultAcct(type){
+  return accs.length?accs[0].id:'';
+}
 function openSheet(r){
-  cur={id:r.id,ocr:r.ocr,cat:r.cat};
-  document.getElementById('shTitle').textContent=r.id?'明細を編集':'明細の確認';
-  document.getElementById('fDate').value=r.date;
+  cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp'};
+  document.getElementById('shTitle').textContent=r.id?'明細を編集':(r.ocr?'明細の確認':'手入力で追加');
+  document.getElementById('fDate').value=r.date||todayIso();
   document.getElementById('fAmt').value=r.amount||'';
   document.getElementById('fShop').value=r.shop||'';
   document.getElementById('fMemo').value=r.memo||'';
   document.getElementById('fOcr').value=r.ocr||'';
   document.getElementById('ocrWrap').classList.toggle('hide',!r.ocr);
   document.getElementById('delWrap').classList.toggle('hide',!r.id);
-  drawCandidates(r.ocr);
-  drawCatPicker(r.cat);
+  fillAccSel('fAcct',r.acct||defaultAcct(cur.type));
+  fillAccSel('fFrom',r.from||(accs[0]?accs[0].id:''));
+  fillAccSel('fTo',  r.to  ||(accs[1]?accs[1].id:(accs[0]?accs[0].id:'')));
+  drawTypeSel();
+  applyType();
   document.getElementById('mask').classList.remove('hide');
 }
-/* 読み取り結果から拾えた候補をボタンで出す。打ち直すより速く、間違いも減る */
-var curAmts=[], curShops=[];
-/* 過去に使った店名を、使用回数の多い順に並べる（同数なら最近使った順） */
-function frequentShops(){
+function fillAccSel(id,sel){
+  var el=document.getElementById(id);
+  el.innerHTML=accs.map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.n)+'</option>'}).join('');
+  if(sel)el.value=sel;
+}
+function drawTypeSel(){
+  document.getElementById('typeSel').innerHTML=TYPES.map(function(t){
+    return '<button class="'+(cur.type===t[0]?'on':'')+'" onclick="setType(\''+t[0]+'\')"><span>'+t[1]+'</span></button>';
+  }).join('');
+}
+function setType(t){
+  cur.type=t;
+  var list=(t==='inc')?icats:cats;
+  if(!list.some(function(c){return c.n===cur.cat}))cur.cat=list[list.length-1].n;
+  drawTypeSel(); applyType();
+}
+function applyType(){
+  var t=cur.type, isTrf=(t==='trf');
+  document.getElementById('nameBlk').classList.toggle('hide',isTrf);
+  document.getElementById('trfBlk').classList.toggle('hide',!isTrf);
+  document.getElementById('nameLbl').textContent=(t==='inc')?'内容（支払元など）':'店名';
+  document.getElementById('acctLbl').textContent=(t==='inc')?'入金先':'支払元';
+  if(!isTrf){ drawCatPicker(cur.cat); drawCandidates(cur.ocr); }
+}
+function drawCatPicker(sel){
+  if(cur)cur.cat=sel;
+  var list=(cur&&cur.type==='inc')?icats:cats;
+  document.getElementById('fCats').innerHTML=list.map(function(c,i){
+    return '<button class="'+(c.n===sel?'on':'')+'" '+
+      (c.n===sel?'style="background:'+c.c+'" ':'')+
+      'onclick="drawCatPicker(pickList()['+i+'].n)">'+esc(c.n)+'</button>';
+  }).join('');
+}
+function pickList(){return (cur&&cur.type==='inc')?icats:cats}
+
+/* 過去に使った名前を、使用回数の多い順に並べる（同数なら最近使った順） */
+function frequentNames(type){
   var cnt={},last={},k,out=[];
   recs.forEach(function(r){
-    if(!r.shop)return;
+    if(r.type==='trf'||!r.shop)return;
+    if((r.type||'exp')!==type)return;
     cnt[r.shop]=(cnt[r.shop]||0)+1;
     if(!last[r.shop]||r.date>last[r.shop])last[r.shop]=r.date;
   });
-  for(k in mem)if(!cnt[k]){cnt[k]=0;last[k]=''}    /* 学習済みだが明細が無い店も候補に */
+  if(type==='exp')for(k in mem)if(!cnt[k]){cnt[k]=0;last[k]=''}
   for(k in cnt)out.push(k);
   return out.sort(function(a,b){
     return (cnt[b]-cnt[a]) || String(last[b]||'').localeCompare(String(last[a]||''));
   });
 }
 function drawCandidates(ocr){
-  var manual=!ocr;
+  var manual=!ocr, freq=frequentNames(cur.type);
   curAmts = ocr?amountCandidates(ocr):[];
-  curShops= ocr?shopCandidates(ocr):frequentShops().slice(0,12);
+  curShops= ocr?shopCandidates(ocr):freq.slice(0,12);
   document.getElementById('shopLbl').textContent=
-    manual?'よく使う店名（タップで入力）':'店名の候補（タップで入力）';
-  document.getElementById('shopList').innerHTML=      /* 入力欄に打つと絞り込み表示される */
-    frequentShops().map(function(s){return '<option value="'+esc(s)+'">'}).join('');
+    manual?((cur.type==='inc')?'よく使う内容（タップで入力）':'よく使う店名（タップで入力）'):'店名の候補（タップで入力）';
+  document.getElementById('shopList').innerHTML=
+    freq.map(function(s){return '<option value="'+esc(s)+'">'}).join('');
   document.getElementById('amtWrap').classList.toggle('hide',!curAmts.length);
   document.getElementById('shopWrap').classList.toggle('hide',!curShops.length);
   document.getElementById('amtCands').innerHTML=curAmts.map(function(v,i){
     return '<button onclick="pickAmt('+i+')">'+yen(v)+'</button>';
   }).join('');
   document.getElementById('shopCands').innerHTML=curShops.map(function(s,i){
-    var learned=mem.hasOwnProperty(s);
+    var learned=(cur.type==='exp')&&mem.hasOwnProperty(s);
     return '<button onclick="pickShop('+i+')"'+(learned?' style="border-color:#1d4ed8;color:#1d4ed8;font-weight:700"':'')+'>'+
       (learned?'★ ':'')+esc(s)+'</button>';
   }).join('');
@@ -742,35 +911,39 @@ function pickAmt(i){document.getElementById('fAmt').value=curAmts[i]}
 function pickShop(i){
   var s=curShops[i];
   document.getElementById('fShop').value=s;
-  if(mem[s]&&cur)drawCatPicker(mem[s]);   /* 学習済みの店ならカテゴリも合わせる */
-}
-function drawCatPicker(sel){
-  if(cur)cur.cat=sel;
-  document.getElementById('fCats').innerHTML=cats.map(function(c,i){
-    return '<button class="'+(c.n===sel?'on':'')+'" '+
-      (c.n===sel?'style="background:'+c.c+'" ':'')+
-      'onclick="drawCatPicker(cats['+i+'].n)">'+esc(c.n)+'</button>';
-  }).join('');
+  if(cur&&cur.type==='exp'&&mem[s])drawCatPicker(mem[s]);
 }
 function closeSheet(){document.getElementById('mask').classList.add('hide');cur=null}
+
 function saveRec(){
   var amt=parseInt(document.getElementById('fAmt').value,10);
   if(!amt||amt<=0){alert('金額を入力してください');return}
-  var shop=document.getElementById('fShop').value.trim();
   var r={
-    id:cur.id||uid(),
+    id:cur.id||uid(), type:cur.type, amount:amt,
     date:document.getElementById('fDate').value||todayIso(),
-    amount:amt, shop:shop, cat:cur.cat,
-    memo:document.getElementById('fMemo').value.trim(),
-    ocr:document.getElementById('fOcr').value.slice(0,3000)
+    memo:document.getElementById('fMemo').value.trim()
   };
+  if(cur.type==='trf'){
+    r.from=document.getElementById('fFrom').value;
+    r.to  =document.getElementById('fTo').value;
+    if(!r.from||!r.to){alert('振替元と振替先を選んでください');return}
+    if(r.from===r.to){alert('振替元と振替先が同じです');return}
+    r.shop=''; r.cat=''; r.ocr='';
+  }else{
+    r.shop=document.getElementById('fShop').value.trim();
+    r.cat=cur.cat;
+    r.acct=document.getElementById('fAcct').value;
+    r.ocr=document.getElementById('fOcr').value.slice(0,3000);
+    if(!r.acct){alert('口座を選んでください');return}
+    if(cur.type==='exp'&&r.shop.length>=2){mem[r.shop]=r.cat;save(K_MEM,mem)}
+  }
   var i=-1,j;
   for(j=0;j<recs.length;j++)if(recs[j].id===r.id){i=j;break}
   if(i>=0)recs[i]=r; else recs.push(r);
-  if(shop.length>=2){mem[shop]=r.cat;save(K_MEM,mem)}       /* 店名→カテゴリを学習 */
   save(K_REC,recs);
+  var label=(cur.type==='trf')?(accName(r.from)+'→'+accName(r.to)):(r.shop||'（名称なし）');
   closeSheet(); refreshAll();
-  setStat('保存しました：'+(shop||'（店名なし）')+' '+yen(amt)+' / '+r.cat);
+  setStat('保存しました：'+label+' '+yen(amt));
 }
 function delRec(){
   if(!cur.id||!confirm('この明細を削除しますか？'))return;
@@ -779,16 +952,21 @@ function delRec(){
   save(K_REC,recs); closeSheet(); refreshAll();
 }
 function addManual(){
-  openSheet({id:null,date:todayIso(),amount:'',shop:'',cat:cats[cats.length-1].n,memo:'',ocr:''});
+  var t=(!document.getElementById('pg-list').classList.contains('hide'))?listMode:'exp';
+  openSheet({id:null,type:t,date:todayIso(),amount:'',shop:'',
+             cat:(t==='inc'?icats[icats.length-1].n:cats[cats.length-1].n),
+             acct:defaultAcct(t),memo:'',ocr:''});
 }
 
 /* ============ 一覧 ============ */
+var listMode='exp';
 function ym(d){return (d||'').slice(0,7)}
+function typeOf(r){return r.type||'exp'}
 function months(){
-  var s={},out=[];
+  var s={},out=[],k;
   recs.forEach(function(r){if(ym(r.date))s[ym(r.date)]=1});
   s[ym(todayIso())]=1;
-  for(var k in s)out.push(k);
+  for(k in s)out.push(k);
   return out.sort().reverse();
 }
 function fillMonthSel(el){
@@ -797,28 +975,54 @@ function fillMonthSel(el){
     return '<option value="'+m+'">'+m.replace('-','年')+'月</option>'}).join('');
   if(ms.indexOf(keep)>=0)el.value=keep;
 }
+function monthRecs(m,type){
+  return recs.filter(function(r){return ym(r.date)===m&&typeOf(r)===type});
+}
+function sumOf(m,type){
+  return monthRecs(m,type).reduce(function(s,r){return s+r.amount},0);
+}
 function week(d){
   var x=new Date(d+'T00:00:00');
   return isNaN(x)?'':'日月火水木金土'.charAt(x.getDay());
 }
+function setMode(m){
+  listMode=m;
+  ['exp','inc','trf'].forEach(function(t){
+    document.getElementById('sg-'+t).classList.toggle('on',t===m);
+  });
+  renderList();
+}
 function renderList(){
   var ms=document.getElementById('mSel'); fillMonthSel(ms);
-  var fs=document.getElementById('fSel');
-  if(fs.options.length!==cats.length+1){
+  var m=ms.value;
+  document.getElementById('totExp').textContent=yen(sumOf(m,'exp'));
+  document.getElementById('totInc').textContent=yen(sumOf(m,'inc'));
+  document.getElementById('totTrf').textContent=yen(sumOf(m,'trf'));
+  ['exp','inc','trf'].forEach(function(t){
+    document.getElementById('sg-'+t).classList.toggle('on',t===listMode);
+  });
+
+  var fs=document.getElementById('fSel'), list=(listMode==='inc')?icats:cats;
+  document.getElementById('fWrap').classList.toggle('hide',listMode==='trf');
+  if(listMode!=='trf'){
     var keep=fs.value;
     fs.innerHTML='<option value="">すべて</option>'+
-      cats.map(function(c){return '<option>'+esc(c.n)+'</option>'}).join('');
-    fs.value=keep;
+      list.map(function(c){return '<option>'+esc(c.n)+'</option>'}).join('');
+    fs.value=list.some(function(c){return c.n===keep})?keep:'';
   }
-  var m=ms.value, f=fs.value;
-  var rs=recs.filter(function(r){return ym(r.date)===m&&(!f||r.cat===f)})
-             .sort(function(a,b){return b.date.localeCompare(a.date)||b.id.localeCompare(a.id)});
-  var tot=rs.reduce(function(s,r){return s+r.amount},0);
-  document.getElementById('listTot').textContent=yen(tot);
-  document.getElementById('cnt').textContent='('+rs.length+'件)';
+  var f=(listMode==='trf')?'':fs.value;
+
+  document.getElementById('listHead').textContent=
+    (listMode==='exp'?'支出':listMode==='inc'?'収入':'振替')+'の明細（タップで編集）';
+
+  var rs=monthRecs(m,listMode).filter(function(r){return !f||r.cat===f})
+         .sort(function(a,b){return b.date.localeCompare(a.date)||b.id.localeCompare(a.id)});
   var body=document.getElementById('listBody');
   if(!rs.length){
-    body.innerHTML='<div class="empty">明細がありません。<br>「撮影」タブからレシートを読み取ってください。</div>';
+    body.innerHTML='<div class="empty">'+
+      (listMode==='exp'?'支出の明細がありません。<br>「撮影」タブ、または右下の＋ボタンから追加できます。':
+       listMode==='inc'?'収入の明細がありません。<br>右下の＋ボタンから追加できます。':
+                        '振替の記録がありません。<br>右下の＋ボタンから追加できます。')+'</div>';
     return;
   }
   var html='',day='';
@@ -827,24 +1031,38 @@ function renderList(){
       day=r.date;
       html+='<div class="day">'+day.slice(5).replace('-','/')+'（'+week(day)+'）</div>';
     }
-    var c=catOf(r.cat);
-    html+='<div class="item" onclick="editRec(\''+r.id+'\')">'+
-      '<span class="tag" style="background:'+c.c+'">'+esc(r.cat)+'</span>'+
-      '<span class="nm">'+esc(r.shop||'（店名なし）')+
-        (r.memo?' <span style="color:var(--sub);font-size:11px">'+esc(r.memo)+'</span>':'')+'</span>'+
-      '<span class="am">'+yen(r.amount)+'</span></div>';
+    if(listMode==='trf'){
+      html+='<div class="item" onclick="editRec(\''+r.id+'\')">'+
+        '<span class="tag" style="background:#64748b">振替</span>'+
+        '<span class="nm">'+esc(accName(r.from))+' → '+esc(accName(r.to))+
+          (r.memo?' <span class="sub">'+esc(r.memo)+'</span>':'')+'</span>'+
+        '<span class="am">'+yen(r.amount)+'</span></div>';
+    }else{
+      var c=(listMode==='inc')?icatOf(r.cat):catOf(r.cat);
+      html+='<div class="item" onclick="editRec(\''+r.id+'\')">'+
+        '<span class="tag" style="background:'+c.c+'">'+esc(r.cat||'-')+'</span>'+
+        '<span class="nm">'+esc(r.shop||'（名称なし）')+
+          ' <span class="sub">'+esc(accName(r.acct))+(r.memo?' / '+esc(r.memo):'')+'</span></span>'+
+        '<span class="am'+(listMode==='inc'?' plus':'')+'">'+
+          (listMode==='inc'?'+':'')+yen(r.amount)+'</span></div>';
+    }
   });
   body.innerHTML=html;
 }
 function editRec(id){
-  for(var i=0;i<recs.length;i++)if(recs[i].id===id){openSheet(recs[i]);return}
+  for(var i=0;i<recs.length;i++)if(recs[i].id===id){
+    var r=recs[i];
+    openSheet({id:r.id,type:typeOf(r),date:r.date,amount:r.amount,shop:r.shop,cat:r.cat,
+               acct:r.acct,from:r.from,to:r.to,memo:r.memo,ocr:r.ocr});
+    return;
+  }
 }
 
 /* ============ 集計 ============ */
 function byCat(m){
-  var o={},out=[];
-  recs.forEach(function(r){if(ym(r.date)===m)o[r.cat]=(o[r.cat]||0)+r.amount});
-  for(var k in o)out.push([k,o[k]]);
+  var o={},out=[],k;
+  monthRecs(m,'exp').forEach(function(r){o[r.cat]=(o[r.cat]||0)+r.amount});
+  for(k in o)out.push([k,o[k]]);
   return out.sort(function(a,b){return b[1]-a[1]});
 }
 function legendHtml(list,tot){
@@ -859,22 +1077,31 @@ function legendHtml(list,tot){
 function renderQuick(){
   var m=ym(todayIso());
   document.getElementById('curMonthLbl').textContent=m.replace('-','年')+'月';
-  var list=byCat(m), tot=list.reduce(function(s,x){return s+x[1]},0);
-  document.getElementById('curMonthAmt').textContent=yen(tot);
+  var ex=sumOf(m,'exp'), inc=sumOf(m,'inc');
+  document.getElementById('qExp').textContent=yen(ex);
+  document.getElementById('qInc').textContent=yen(inc);
+  document.getElementById('qNet').textContent=signed(inc-ex);
+  var list=byCat(m);
   document.getElementById('quickLegend').innerHTML=
-    legendHtml(list.slice(0,5),tot)||'<div class="empty">まだ記録がありません</div>';
+    legendHtml(list.slice(0,5),ex)||'<div class="empty">まだ記録がありません</div>';
+  document.getElementById('quickBal').innerHTML=balanceHtml();
 }
 function prevMonth(m){
   var p=m.split('-'), d=new Date(+p[0],+p[1]-2,1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
 }
 function renderSum(){
+  document.getElementById('balBody').innerHTML=balanceHtml();
   var ss=document.getElementById('sSel'); fillMonthSel(ss);
-  var m=ss.value, list=byCat(m), tot=list.reduce(function(s,x){return s+x[1]},0);
+  var m=ss.value, list=byCat(m), tot=sumOf(m,'exp'), inc=sumOf(m,'inc');
   document.getElementById('sumTot').textContent=yen(tot);
-  var pt=byCat(prevMonth(m)).reduce(function(s,x){return s+x[1]},0);
+  document.getElementById('sumInc').textContent=yen(inc);
+  var net=document.getElementById('sumNet');
+  net.textContent=signed(inc-tot);
+  net.className='v'+((inc-tot)<0?' neg':' plus');
+  var pt=sumOf(prevMonth(m),'exp');
   document.getElementById('sumDiff').textContent=pt?
-    ('前月 '+yen(pt)+' → 差額 '+(tot>=pt?'+':'-')+yen(Math.abs(tot-pt))):'前月のデータはありません';
+    ('支出は前月 '+yen(pt)+' → 差額 '+(tot>=pt?'+':'-')+yen(Math.abs(tot-pt))):'前月のデータはありません';
   document.getElementById('sumLegend').innerHTML=legendHtml(list,tot)||'<div class="empty">データなし</div>';
   drawDonut(list,tot); drawTrend(m);
 }
@@ -910,10 +1137,7 @@ function drawTrend(m){
   var g=prep(document.getElementById('trend'),220), x=g.x;
   var ms=[],cm=m,i;
   for(i=0;i<12;i++){ms.unshift(cm);cm=prevMonth(cm)}
-  var vals=ms.map(function(mm){
-    return recs.filter(function(r){return ym(r.date)===mm})
-               .reduce(function(s,r){return s+r.amount},0);
-  });
+  var vals=ms.map(function(mm){return sumOf(mm,'exp')});
   var max=Math.max.apply(null,vals.concat([1]));
   var padL=8,padB=24,padT=14, bw=(g.w-padL*2)/12;
   vals.forEach(function(v,i){
@@ -932,7 +1156,18 @@ function drawTrend(m){
 }
 
 /* ============ 設定 ============ */
+var memKeys=[];
 function renderSet(){
+  document.getElementById('accEdit').innerHTML=accs.map(function(a,i){
+    return '<div class="catrow">'+
+      '<input type="color" value="'+a.c+'" data-i="'+i+'" data-f="c">'+
+      '<input class="nm" value="'+esc(a.n)+'" data-i="'+i+'" data-f="n" placeholder="口座名">'+
+      '<select data-i="'+i+'" data-f="k">'+KINDS.map(function(k){
+        return '<option'+(a.k===k?' selected':'')+'>'+k+'</option>'}).join('')+'</select>'+
+      '<input class="num" type="number" value="'+(parseInt(a.init,10)||0)+'" data-i="'+i+'" data-f="init" placeholder="初期残高">'+
+      '<button class="danger" onclick="rmAcc('+i+')">×</button></div>';
+  }).join('');
+
   document.getElementById('catEdit').innerHTML=cats.map(function(c,i){
     return '<div class="catrow">'+
       '<input type="color" value="'+c.c+'" data-i="'+i+'" data-f="c">'+
@@ -940,6 +1175,14 @@ function renderSet(){
       '<input class="kw" value="'+esc(c.k||'')+'" data-i="'+i+'" data-f="k" placeholder="キーワード（,区切り）">'+
       '<button class="danger" onclick="rmCat('+i+')">×</button></div>';
   }).join('');
+
+  document.getElementById('icatEdit').innerHTML=icats.map(function(c,i){
+    return '<div class="catrow">'+
+      '<input type="color" value="'+c.c+'" data-i="'+i+'" data-f="c">'+
+      '<input class="nm" value="'+esc(c.n)+'" data-i="'+i+'" data-f="n" placeholder="名称">'+
+      '<button class="danger" onclick="rmICat('+i+')">×</button></div>';
+  }).join('');
+
   var keys=[],k;
   for(k in mem)keys.push(k);
   document.getElementById('memList').innerHTML=keys.length?
@@ -951,10 +1194,35 @@ function renderSet(){
     '<div class="empty">まだありません。<br>一覧でカテゴリを直すと店名を記憶します。</div>';
   memKeys=keys;
 }
-var memKeys=[];
-function rmMem(i){
-  if(!memKeys[i])return;
-  delete mem[memKeys[i]]; save(K_MEM,mem); renderSet();
+function collect(sel,arr){
+  Array.prototype.forEach.call(document.querySelectorAll(sel),function(el){
+    var o=arr[+el.dataset.i]; if(!o)return;
+    if(el.dataset.f==='init'){o.init=parseInt(el.value,10)||0;return}
+    if(el.value.trim())o[el.dataset.f]=el.value;
+  });
+}
+function saveAccs(silent){
+  collect('#accEdit input,#accEdit select',accs);
+  save(K_ACC,accs); refreshAll();
+  if(!silent){renderSet();alert('保存しました')}
+}
+function addAcc(){
+  saveAccs(true);
+  accs.push({id:uid(),n:'新しい口座',k:'銀行',c:'#94a3b8',init:0});
+  save(K_ACC,accs); renderSet();
+}
+function rmAcc(i){
+  if(accs.length<=1){alert('口座は1つ以上必要です');return}
+  var id=accs[i].id;
+  var used=recs.some(function(r){return r.acct===id||r.from===id||r.to===id});
+  if(used&&!confirm('「'+accs[i].n+'」は明細で使われています。削除すると、その明細の口座名が「(削除された口座)」になります。よろしいですか？'))return;
+  if(!used&&!confirm('「'+accs[i].n+'」を削除しますか？'))return;
+  saveAccs(true); accs.splice(i,1); save(K_ACC,accs); renderSet();
+}
+function saveCats(silent){
+  collect('#catEdit input',cats);
+  save(K_CAT,cats); refreshAll();
+  if(!silent){renderSet();alert('保存しました')}
 }
 function addCat(){
   saveCats(true);
@@ -966,14 +1234,24 @@ function rmCat(i){
   if(!confirm('「'+cats[i].n+'」を削除しますか？（登録済み明細のカテゴリ名はそのまま残ります）'))return;
   saveCats(true); cats.splice(i,1); save(K_CAT,cats); renderSet();
 }
-function saveCats(silent){
-  var els=document.querySelectorAll('#catEdit input');
-  Array.prototype.forEach.call(els,function(el){
-    var c=cats[+el.dataset.i];
-    if(c&&el.value.trim())c[el.dataset.f]=el.value;
-  });
-  save(K_CAT,cats); refreshAll();
+function saveICats(silent){
+  collect('#icatEdit input',icats);
+  save(K_ICAT,icats); refreshAll();
   if(!silent){renderSet();alert('保存しました')}
+}
+function addICat(){
+  saveICats(true);
+  icats.push({n:'新カテゴリ',c:'#94a3b8'});
+  save(K_ICAT,icats); renderSet();
+}
+function rmICat(i){
+  if(icats.length<=1)return;
+  if(!confirm('「'+icats[i].n+'」を削除しますか？'))return;
+  saveICats(true); icats.splice(i,1); save(K_ICAT,icats); renderSet();
+}
+function rmMem(i){
+  if(!memKeys[i])return;
+  delete mem[memKeys[i]]; save(K_MEM,mem); renderSet();
 }
 function clearAll(){
   if(!confirm('すべての明細を削除します。よろしいですか？'))return;
@@ -995,14 +1273,21 @@ function exportCsv(){
   var rs=recs.filter(function(r){return ym(r.date)===m})
              .sort(function(a,b){return a.date.localeCompare(b.date)});
   if(!rs.length){alert('この月のデータがありません');return}
-  var csv=['日付,店名,カテゴリ,金額,メモ'].concat(rs.map(function(r){
-    return [r.date,q(r.shop),q(r.cat),r.amount,q(r.memo)].join(',');
+  var csv=['日付,種別,店名・内容,カテゴリ,口座,振替元,振替先,金額,メモ'].concat(rs.map(function(r){
+    var t=typeOf(r);
+    return [r.date,
+            q(t==='exp'?'支出':t==='inc'?'収入':'振替'),
+            q(r.shop),q(r.cat),
+            q(t==='trf'?'':accName(r.acct)),
+            q(t==='trf'?accName(r.from):''),
+            q(t==='trf'?accName(r.to):''),
+            r.amount,q(r.memo)].join(',');
   })).join('\r\n');
   dl('家計簿_'+m+'.csv',csv,'text/csv;charset=utf-8');
 }
 function backup(){
   dl('家計簿バックアップ_'+todayIso()+'.json',
-     JSON.stringify({recs:recs,cats:cats,mem:mem},null,1),'application/json');
+     JSON.stringify({recs:recs,cats:cats,icats:icats,accs:accs,mem:mem},null,1),'application/json');
 }
 function restore(ev){
   var f=ev.target.files[0]; if(!f)return;
@@ -1012,8 +1297,12 @@ function restore(ev){
       var d=JSON.parse(fr.result.replace(/^﻿/,''));
       if(!d||!Array.isArray(d.recs))throw new Error('形式が違います');
       if(!confirm('現在のデータを置き換えます。よろしいですか？'))return;
-      recs=d.recs; cats=d.cats||cats; mem=d.mem||{};
-      save(K_REC,recs); save(K_CAT,cats); save(K_MEM,mem);
+      recs=d.recs; cats=d.cats||cats; icats=d.icats||icats; accs=d.accs||accs; mem=d.mem||{};
+      recs.forEach(function(r){                       /* 旧バックアップも今の形に合わせる */
+        if(!r.type)r.type='exp';
+        if(r.type!=='trf'&&!r.acct)r.acct=accs[0].id;
+      });
+      save(K_REC,recs);save(K_CAT,cats);save(K_ICAT,icats);save(K_ACC,accs);save(K_MEM,mem);
       refreshAll(); alert('復元しました（'+recs.length+'件）');
     }catch(e){alert('読み込めませんでした：'+e.message)}
   };
@@ -1030,7 +1319,6 @@ function refreshAll(){
 window.addEventListener('resize',function(){
   if(!document.getElementById('pg-sum').classList.contains('hide'))renderSum();
 });
-/* オフライン動作用。https（またはlocalhost）でのみ有効になる */
 if('serviceWorker' in navigator && window.isSecureContext){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('./sw.js').catch(function(){});
