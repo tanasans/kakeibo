@@ -226,8 +226,10 @@
     </div>
     <div class="fg hide" id="amtWrap"><label>読み取れた金額の候補（タップで入力）</label>
       <div class="catgrid" id="amtCands"></div></div>
-    <div class="fg"><label>店名</label><input type="text" id="fShop"></div>
-    <div class="fg hide" id="shopWrap"><label>店名の候補（タップで入力）</label>
+    <div class="fg"><label>店名</label>
+      <input type="text" id="fShop" list="shopList" autocomplete="off">
+      <datalist id="shopList"></datalist></div>
+    <div class="fg hide" id="shopWrap"><label id="shopLbl">店名の候補（タップで入力）</label>
       <div class="catgrid" id="shopCands"></div></div>
     <div class="fg"><label>カテゴリ</label><div class="catgrid" id="fCats"></div></div>
     <div class="fg"><label>メモ</label><input type="text" id="fMemo"></div>
@@ -703,9 +705,28 @@ function openSheet(r){
 }
 /* 読み取り結果から拾えた候補をボタンで出す。打ち直すより速く、間違いも減る */
 var curAmts=[], curShops=[];
+/* 過去に使った店名を、使用回数の多い順に並べる（同数なら最近使った順） */
+function frequentShops(){
+  var cnt={},last={},k,out=[];
+  recs.forEach(function(r){
+    if(!r.shop)return;
+    cnt[r.shop]=(cnt[r.shop]||0)+1;
+    if(!last[r.shop]||r.date>last[r.shop])last[r.shop]=r.date;
+  });
+  for(k in mem)if(!cnt[k]){cnt[k]=0;last[k]=''}    /* 学習済みだが明細が無い店も候補に */
+  for(k in cnt)out.push(k);
+  return out.sort(function(a,b){
+    return (cnt[b]-cnt[a]) || String(last[b]||'').localeCompare(String(last[a]||''));
+  });
+}
 function drawCandidates(ocr){
+  var manual=!ocr;
   curAmts = ocr?amountCandidates(ocr):[];
-  curShops= ocr?shopCandidates(ocr):[];
+  curShops= ocr?shopCandidates(ocr):frequentShops().slice(0,12);
+  document.getElementById('shopLbl').textContent=
+    manual?'よく使う店名（タップで入力）':'店名の候補（タップで入力）';
+  document.getElementById('shopList').innerHTML=      /* 入力欄に打つと絞り込み表示される */
+    frequentShops().map(function(s){return '<option value="'+esc(s)+'">'}).join('');
   document.getElementById('amtWrap').classList.toggle('hide',!curAmts.length);
   document.getElementById('shopWrap').classList.toggle('hide',!curShops.length);
   document.getElementById('amtCands').innerHTML=curAmts.map(function(v,i){
