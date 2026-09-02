@@ -65,8 +65,15 @@
   .seg.sm button{flex-direction:row;padding:8px 4px;font-size:13px}
   .seg.sm button.on{font-weight:700}
   /* 一覧 */
-  .day{font-size:12px;color:var(--sub);font-weight:700;margin:14px 0 6px;
+  .day{display:flex;justify-content:space-between;align-items:baseline;
+       font-size:12px;color:var(--sub);font-weight:700;margin:14px 0 6px;
        border-bottom:1px solid var(--line2);padding-bottom:4px}
+  .day .dt{font-variant-numeric:tabular-nums;color:var(--ink);font-size:13px}
+  .am2{display:flex;flex-direction:column;align-items:flex-end;line-height:1.35}
+  .am2 .sub{font-weight:400}
+  .abar{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .abar .nm{flex:1;font-size:13px;font-weight:700}
+  .abar button{padding:6px 10px;font-size:12px}
   .item{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line2);cursor:pointer}
   .item:hover{background:#f8fafc}
   .tag{font-size:11px;padding:3px 7px;border-radius:999px;color:#fff;white-space:nowrap;font-weight:700}
@@ -194,6 +201,7 @@
       <button id="sg-inc" onclick="setMode('inc')"><span>収入</span><b id="totInc">¥0</b></button>
       <button id="sg-trf" onclick="setMode('trf')"><span>振替</span><b id="totTrf">¥0</b></button>
     </div>
+    <div id="acctBar" class="hide"></div>
   </div>
   <div class="panel">
     <h2 id="listHead">明細（タップで編集）</h2>
@@ -826,7 +834,8 @@ function balanceHtml(){
           '<span class="v'+(sub<0?' neg':'')+'">'+signed(sub)+'</span></div>';
     members.forEach(function(a){
       var b=balanceOf(a.id);
-      html+='<div class="bal acc"><span class="nm"><span class="tag" style="background:'+a.c+'">'+esc(a.n)+'</span></span>'+
+      html+='<div class="bal acc" style="cursor:pointer" onclick="openAcct(\''+esc(a.id)+'\')" title="タップでこの口座の入出金を表示">'+
+            '<span class="nm"><span class="tag" style="background:'+a.c+'">'+esc(a.n)+'</span></span>'+
             '<span class="v'+(b<0?' neg':'')+'">'+signed(b)+'</span></div>';
     });
   });
@@ -910,13 +919,20 @@ function frequentNames(type){
   });
 }
 function drawCandidates(ocr){
-  var manual=!ocr, freq=frequentNames(cur.type);
+  var freq=frequentNames(cur.type);
+  document.getElementById('shopList').innerHTML=          /* 入力欄の絞り込みは常に使える */
+    freq.map(function(s){return '<option value="'+esc(s)+'">'}).join('');
+  if(cur.id){                                             /* 保存済みを開いたときは候補を出さない */
+    curAmts=[]; curShops=[];
+    document.getElementById('amtWrap').classList.add('hide');
+    document.getElementById('shopWrap').classList.add('hide');
+    return;
+  }
+  var manual=!ocr;
   curAmts = ocr?amountCandidates(ocr):[];
   curShops= ocr?shopCandidates(ocr):freq.slice(0,12);
   document.getElementById('shopLbl').textContent=
     manual?((cur.type==='inc')?'よく使う内容（タップで入力）':'よく使う店名（タップで入力）'):'店名の候補（タップで入力）';
-  document.getElementById('shopList').innerHTML=
-    freq.map(function(s){return '<option value="'+esc(s)+'">'}).join('');
   document.getElementById('amtWrap').classList.toggle('hide',!curAmts.length);
   document.getElementById('shopWrap').classList.toggle('hide',!curShops.length);
   document.getElementById('amtCands').innerHTML=curAmts.map(function(v,i){
@@ -1007,11 +1023,33 @@ function week(d){
   return isNaN(x)?'':'日月火水木金土'.charAt(x.getDay());
 }
 function setMode(m){
-  listMode=m;
+  listMode=m; acctFilter='';            /* 種別タブを押したら口座の絞り込みは解除 */
   ['exp','inc','trf'].forEach(function(t){
     document.getElementById('sg-'+t).classList.toggle('on',t===m);
   });
   renderList();
+}
+/* ---- 口座ごとの入出金 ---- */
+var acctFilter='';
+function openAcct(id){acctFilter=id;tab('list')}
+function clearAcct(){acctFilter='';renderList()}
+function involves(r,id){
+  return (typeOf(r)==='trf')?(r.from===id||r.to===id):(r.acct===id);
+}
+/* その明細がこの口座の残高をいくら動かすか */
+function delta(r,id){
+  var t=typeOf(r);
+  if(t==='trf')return (r.to===id?r.amount:0)-(r.from===id?r.amount:0);
+  if(t==='inc')return (r.acct===id)?r.amount:0;
+  return (r.acct===id)?-r.amount:0;
+}
+/* 各明細の直後の残高を求める。残高欄と同じく基準日以降だけを積み上げる */
+function runningBalances(id){
+  var a=accOf(id), b=a?(parseInt(a.init,10)||0):0, map={};
+  recs.filter(function(r){return involves(r,id)&&(!balDate||r.date>=balDate)})
+      .sort(function(x,y){return x.date.localeCompare(y.date)||x.id.localeCompare(y.id)})
+      .forEach(function(r){ b+=delta(r,id); map[r.id]=b; });
+  return map;
 }
 function renderList(){
   var ms=document.getElementById('mSel'); fillMonthSel(ms);
@@ -1022,6 +1060,18 @@ function renderList(){
   ['exp','inc','trf'].forEach(function(t){
     document.getElementById('sg-'+t).classList.toggle('on',t===listMode);
   });
+
+  /* 口座を指定しているときは、その口座の入出金だけを種別横断で表示する */
+  var acct=acctFilter?accOf(acctFilter):null;
+  if(acctFilter&&!acct)acctFilter='';
+  var abar=document.getElementById('acctBar');
+  abar.classList.toggle('hide',!acct);
+  if(acct){
+    abar.innerHTML='<div class="abar"><span class="tag" style="background:'+acct.c+'">'+esc(acct.n)+'</span>'+
+      '<span class="nm">の入出金</span><button onclick="clearAcct()">絞り込みを解除</button></div>';
+    renderAcctList(m,acct);
+    return;
+  }
 
   var fs=document.getElementById('fSel'), list=(listMode==='inc')?icats:cats;
   document.getElementById('fWrap').classList.toggle('hide',listMode==='trf');
@@ -1046,11 +1096,15 @@ function renderList(){
                         '振替の記録がありません。<br>右下の＋ボタンから追加できます。')+'</div>';
     return;
   }
+  var dayTot={};                                  /* 日付ごとの合計 */
+  rs.forEach(function(r){dayTot[r.date]=(dayTot[r.date]||0)+r.amount});
   var html='',day='';
   rs.forEach(function(r){
     if(r.date!==day){
       day=r.date;
-      html+='<div class="day">'+day.slice(5).replace('-','/')+'（'+week(day)+'）</div>';
+      html+='<div class="day"><span>'+day.slice(5).replace('-','/')+'（'+week(day)+'）</span>'+
+            '<span class="dt'+(listMode==='inc'?' plus':'')+'">'+
+            (listMode==='inc'?'+':'')+yen(dayTot[day])+'</span></div>';
     }
     if(listMode==='trf'){
       html+='<div class="item" onclick="editRec(\''+r.id+'\')">'+
@@ -1067,6 +1121,50 @@ function renderList(){
         '<span class="am'+(listMode==='inc'?' plus':'')+'">'+
           (listMode==='inc'?'+':'')+yen(r.amount)+'</span></div>';
     }
+  });
+  body.innerHTML=html;
+}
+/* 1つの口座について、収入・支出・振替をまとめて時系列で表示する */
+function renderAcctList(m,acct){
+  document.getElementById('fWrap').classList.add('hide');
+  document.getElementById('listHead').textContent=acct.n+' の入出金（タップで編集）';
+  var run=runningBalances(acct.id);
+  var rs=recs.filter(function(r){return ym(r.date)===m&&involves(r,acct.id)})
+             .sort(function(a,b){return b.date.localeCompare(a.date)||b.id.localeCompare(a.id)});
+  var body=document.getElementById('listBody');
+  if(!rs.length){
+    body.innerHTML='<div class="empty">この月にこの口座の入出金はありません。<br>'+
+      '現在の残高は '+signed(balanceOf(acct.id))+' です。</div>';
+    return;
+  }
+  var dayNet={};
+  rs.forEach(function(r){dayNet[r.date]=(dayNet[r.date]||0)+delta(r,acct.id)});
+  var html='',day='';
+  rs.forEach(function(r){
+    if(r.date!==day){
+      day=r.date;
+      var dn=dayNet[day];
+      html+='<div class="day"><span>'+day.slice(5).replace('-','/')+'（'+week(day)+'）</span>'+
+            '<span class="dt'+(dn>0?' plus':dn<0?' neg':'')+'">'+(dn>0?'+':'')+signed(dn).replace('-¥','-¥')+'</span></div>';
+    }
+    var t=typeOf(r), d=delta(r,acct.id);
+    var tagBg=(t==='trf')?'#64748b':(t==='inc'?icatOf(r.cat).c:catOf(r.cat).c);
+    var tagTx=(t==='trf')?'振替':(r.cat||'-');
+    var name, sub;
+    if(t==='trf'){
+      name=(r.from===acct.id)?('→ '+accName(r.to)):('← '+accName(r.from));
+      sub=r.memo||'';
+    }else{
+      name=r.shop||'（名称なし）';
+      sub=(t==='inc'?'収入':'支出')+(r.memo?' / '+r.memo:'');
+    }
+    var bal=run.hasOwnProperty(r.id)?('残高 '+signed(run[r.id])):'';
+    html+='<div class="item" onclick="editRec(\''+r.id+'\')">'+
+      '<span class="tag" style="background:'+tagBg+'">'+esc(tagTx)+'</span>'+
+      '<span class="nm">'+esc(name)+' <span class="sub">'+esc(sub)+'</span></span>'+
+      '<span class="am am2"><span class="'+(d>0?'plus':d<0?'neg':'')+'">'+
+        (d>0?'+':'')+signed(d)+'</span>'+
+        (bal?'<span class="sub">'+bal+'</span>':'')+'</span></div>';
   });
   body.innerHTML=html;
 }
