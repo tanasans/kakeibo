@@ -84,7 +84,11 @@
   .bal.sum{border-bottom:none;border-top:2px solid var(--line);margin-top:4px;padding-top:10px}
   .bal.sum .v{font-size:20px}
   .neg{color:var(--out)}
-  .kind{font-size:11px;color:var(--sub);font-weight:700;margin:12px 0 2px}
+  .kind{display:flex;justify-content:space-between;align-items:baseline;
+        font-size:11px;color:var(--sub);font-weight:700;margin:14px 0 2px;
+        border-bottom:1px solid var(--line2);padding-bottom:4px}
+  .kind .v{font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .bal.acc{padding:7px 0 7px 10px;border-bottom:none}
   /* グラフ凡例 */
   .legend{margin-top:10px}
   .lg{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
@@ -810,14 +814,19 @@ function balanceHtml(){
   var html=balDate?
     '<div class="note" style="margin:0 0 4px">基準日 '+balDate.replace(/-/g,'/')+' の残高に、それ以降の入出金を反映</div>':
     '<div class="note" style="margin:0 0 4px">全期間の入出金を反映（設定タブで基準日を指定できます）</div>';
-  var lastKind=null;
+  /* 種別ごとにまとめ、見出し行にその種別の小計を出す */
   KINDS.concat(['']).forEach(function(kind){
-    accs.forEach(function(a){
-      var k=(KINDS.indexOf(a.k)>=0)?a.k:'';
-      if(k!==kind)return;
-      if(kind!==lastKind){html+='<div class="kind">'+esc(kind||'その他')+'</div>';lastKind=kind}
+    var members=accs.filter(function(a){
+      return ((KINDS.indexOf(a.k)>=0)?a.k:'')===kind;
+    });
+    if(!members.length)return;
+    var sub=0;
+    members.forEach(function(a){sub+=balanceOf(a.id)});
+    html+='<div class="kind"><span>'+esc(kind||'その他')+'（'+members.length+'件）</span>'+
+          '<span class="v'+(sub<0?' neg':'')+'">'+signed(sub)+'</span></div>';
+    members.forEach(function(a){
       var b=balanceOf(a.id);
-      html+='<div class="bal"><span class="nm"><span class="tag" style="background:'+a.c+'">'+esc(a.n)+'</span></span>'+
+      html+='<div class="bal acc"><span class="nm"><span class="tag" style="background:'+a.c+'">'+esc(a.n)+'</span></span>'+
             '<span class="v'+(b<0?' neg':'')+'">'+signed(b)+'</span></div>';
     });
   });
