@@ -237,13 +237,20 @@
 <!-- ===== 設定 ===== -->
 <section id="pg-set" class="hide">
   <div class="panel">
-    <h2>口座（現金・銀行・電子マネー）</h2>
+    <h2>口座（現金・銀行・電子マネー・証券）</h2>
+    <div class="fg" style="max-width:220px">
+      <label>残高の基準日（全口座共通）</label>
+      <input type="date" id="balDate">
+    </div>
     <div id="accEdit"></div>
     <div class="row" style="margin-top:8px">
       <div><button onclick="addAcc()" style="width:100%">口座を追加</button></div>
       <div><button class="pri" onclick="saveAccs()" style="width:100%">保存</button></div>
     </div>
-    <div class="note">「初期残高」は、この家計簿を使い始めた時点の残高です。ここに実際の残高を入れると、以降の入出金を反映した現在残高が集計タブに表示されます。</div>
+    <div class="note">
+      <b>基準日</b>にその時点の実際の残高を「残高」欄に入力してください。<b>基準日当日以降</b>の入出金だけが加減算され、それより前の明細は残高に影響しません（基準日の残高にすでに含まれているため）。<br>
+      基準日を空欄にすると、全期間の明細を集計します。
+    </div>
   </div>
   <div class="panel">
     <h2>支出カテゴリと自動仕分けキーワード</h2>
@@ -324,7 +331,7 @@
 <script>
 /* ============ 保存領域 ============ */
 var K_REC='kakeibo_recs', K_CAT='kakeibo_cats', K_MEM='kakeibo_shopmem',
-    K_ACC='kakeibo_accounts', K_ICAT='kakeibo_incats';
+    K_ACC='kakeibo_accounts', K_ICAT='kakeibo_incats', K_BDATE='kakeibo_baldate';
 
 var DEFAULT_CATS=[
  {n:'食費',c:'#e11d48',k:'スーパー,マート,イオン,ライフ,西友,マルエツ,サミット,オーケー,業務スーパー,まいばすけっと,コープ,精肉,鮮魚,青果,弁当,パン,牛乳,惣菜,セブン,ローソン,ファミリーマート,ミニストップ'},
@@ -346,13 +353,14 @@ var DEFAULT_ACCS=[
  {id:'bank', n:'銀行口座',  k:'銀行',      c:'#1d4ed8', init:0},
  {id:'emny', n:'電子マネー',k:'電子マネー',c:'#b45309', init:0}
 ];
-var KINDS=['現金','銀行','電子マネー'];
+var KINDS=['現金','銀行','電子マネー','証券'];
 
 function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){alert('保存できませんでした（容量超過の可能性）')}}
 
 var recs=load(K_REC,[]), cats=load(K_CAT,DEFAULT_CATS), mem=load(K_MEM,{}),
-    accs=load(K_ACC,DEFAULT_ACCS), icats=load(K_ICAT,DEFAULT_ICATS);
+    accs=load(K_ACC,DEFAULT_ACCS), icats=load(K_ICAT,DEFAULT_ICATS),
+    balDate=load(K_BDATE,'');            /* 残高の基準日。空なら全期間を集計 */
 
 function yen(n){return '¥'+(n||0).toLocaleString('ja-JP')}
 function signed(n){return (n<0?'-¥':'¥')+Math.abs(n||0).toLocaleString('ja-JP')}
@@ -785,6 +793,7 @@ function guessCat(text){
 function balanceOf(id){
   var a=accOf(id), b=a?(parseInt(a.init,10)||0):0;
   recs.forEach(function(r){
+    if(balDate&&r.date<balDate)return;   /* 基準日より前は初期残高に含まれているとみなす */
     if(r.type==='inc'&&r.acct===id)b+=r.amount;
     else if(r.type==='trf'){
       if(r.from===id)b-=r.amount;
@@ -798,7 +807,10 @@ function totalBalance(){
 }
 function balanceHtml(){
   if(!accs.length)return '<div class="empty">口座が登録されていません。<br>設定タブで追加してください。</div>';
-  var html='',lastKind=null;
+  var html=balDate?
+    '<div class="note" style="margin:0 0 4px">基準日 '+balDate.replace(/-/g,'/')+' の残高に、それ以降の入出金を反映</div>':
+    '<div class="note" style="margin:0 0 4px">全期間の入出金を反映（設定タブで基準日を指定できます）</div>';
+  var lastKind=null;
   KINDS.concat(['']).forEach(function(kind){
     accs.forEach(function(a){
       var k=(KINDS.indexOf(a.k)>=0)?a.k:'';
@@ -1158,13 +1170,14 @@ function drawTrend(m){
 /* ============ 設定 ============ */
 var memKeys=[];
 function renderSet(){
+  document.getElementById('balDate').value=balDate||'';
   document.getElementById('accEdit').innerHTML=accs.map(function(a,i){
     return '<div class="catrow">'+
       '<input type="color" value="'+a.c+'" data-i="'+i+'" data-f="c">'+
       '<input class="nm" value="'+esc(a.n)+'" data-i="'+i+'" data-f="n" placeholder="口座名">'+
       '<select data-i="'+i+'" data-f="k">'+KINDS.map(function(k){
         return '<option'+(a.k===k?' selected':'')+'>'+k+'</option>'}).join('')+'</select>'+
-      '<input class="num" type="number" value="'+(parseInt(a.init,10)||0)+'" data-i="'+i+'" data-f="init" placeholder="初期残高">'+
+      '<input class="num" type="number" value="'+(parseInt(a.init,10)||0)+'" data-i="'+i+'" data-f="init" placeholder="残高">'+
       '<button class="danger" onclick="rmAcc('+i+')">×</button></div>';
   }).join('');
 
@@ -1203,6 +1216,8 @@ function collect(sel,arr){
 }
 function saveAccs(silent){
   collect('#accEdit input,#accEdit select',accs);
+  balDate=document.getElementById('balDate').value||'';
+  save(K_BDATE,balDate);
   save(K_ACC,accs); refreshAll();
   if(!silent){renderSet();alert('保存しました')}
 }
@@ -1287,7 +1302,7 @@ function exportCsv(){
 }
 function backup(){
   dl('家計簿バックアップ_'+todayIso()+'.json',
-     JSON.stringify({recs:recs,cats:cats,icats:icats,accs:accs,mem:mem},null,1),'application/json');
+     JSON.stringify({recs:recs,cats:cats,icats:icats,accs:accs,mem:mem,balDate:balDate},null,1),'application/json');
 }
 function restore(ev){
   var f=ev.target.files[0]; if(!f)return;
@@ -1298,11 +1313,12 @@ function restore(ev){
       if(!d||!Array.isArray(d.recs))throw new Error('形式が違います');
       if(!confirm('現在のデータを置き換えます。よろしいですか？'))return;
       recs=d.recs; cats=d.cats||cats; icats=d.icats||icats; accs=d.accs||accs; mem=d.mem||{};
+      balDate=d.balDate||'';
       recs.forEach(function(r){                       /* 旧バックアップも今の形に合わせる */
         if(!r.type)r.type='exp';
         if(r.type!=='trf'&&!r.acct)r.acct=accs[0].id;
       });
-      save(K_REC,recs);save(K_CAT,cats);save(K_ICAT,icats);save(K_ACC,accs);save(K_MEM,mem);
+      save(K_REC,recs);save(K_CAT,cats);save(K_ICAT,icats);save(K_ACC,accs);save(K_MEM,mem);save(K_BDATE,balDate);
       refreshAll(); alert('復元しました（'+recs.length+'件）');
     }catch(e){alert('読み込めませんでした：'+e.message)}
   };
