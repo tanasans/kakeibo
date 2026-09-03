@@ -115,7 +115,9 @@
   .catgrid{display:flex;flex-wrap:wrap;gap:6px}
   .catgrid button{padding:7px 12px;border-radius:999px;font-size:13px}
   .catgrid button.on{color:#fff;font-weight:700;border-color:transparent}
-  .ocrbox{font-size:11px;line-height:1.5;height:110px;font-family:ui-monospace,Consolas,monospace}
+  #fImg{width:100%;max-height:210px;object-fit:contain;background:var(--line2);
+        border:1px solid var(--line);border-radius:6px;display:block;cursor:zoom-in}
+  #fImg.zoom{max-height:none;cursor:zoom-out}
   .note{font-size:11px;color:var(--sub);line-height:1.7;margin-top:8px}
   .catrow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
   .catrow input[type=color]{width:38px;padding:2px;flex:none;height:34px}
@@ -331,7 +333,10 @@
     </div>
 
     <div class="fg"><label>メモ</label><input type="text" id="fMemo"></div>
-    <div class="fg" id="ocrWrap"><label>読み取り結果（修正可）</label><textarea id="fOcr" class="ocrbox"></textarea></div>
+    <div class="fg hide" id="imgWrap"><label>レシート画像（タップで拡大）</label>
+      <img id="fImg" alt="レシート" onclick="this.classList.toggle('zoom')">
+      <div style="margin-top:6px"><button type="button" onclick="dropImg()">画像を削除</button></div>
+    </div>
     <div class="row" style="margin-top:14px">
       <div><button onclick="closeSheet()" style="width:100%">キャンセル</button></div>
       <div id="delWrap" class="hide"><button class="danger" onclick="delRec()" style="width:100%">削除</button></div>
@@ -391,9 +396,73 @@ function esc(s){return (s||'').replace(/[&<>"']/g,function(c){
   recs.forEach(function(r){
     if(!r.type){r.type='exp';changed=true}
     if(r.type!=='trf'&&!r.acct){r.acct=accs[0].id;changed=true}
+    if(r.ocr){delete r.ocr;changed=true}   /* 読み取りテキストの保存は廃止。容量も食うので捨てる */
   });
   if(changed)save(K_REC,recs);
 })();
+
+/* ============ レシート画像の保存 ============
+   画像はlocalStorage（約5MB）だとすぐ上限に達するため、IndexedDBに置く。 */
+var IDB=null;
+function idb(){
+  if(IDB)return IDB;
+  IDB=new Promise(function(res,rej){
+    if(!window.indexedDB)return rej(new Error('IndexedDB非対応'));
+    var q=indexedDB.open('kakeibo-img',1);
+    q.onupgradeneeded=function(){q.result.createObjectStore('img')};
+    q.onsuccess=function(){res(q.result)};
+    q.onerror=function(){rej(q.error)};
+  });
+  return IDB;
+}
+function imgPut(id,data){
+  return idb().then(function(db){return new Promise(function(res,rej){
+    var t=db.transaction('img','readwrite');
+    t.objectStore('img').put(data,id);
+    t.oncomplete=function(){res()}; t.onerror=function(){rej(t.error)};
+  })});
+}
+function imgGet(id){
+  return idb().then(function(db){return new Promise(function(res){
+    var t=db.transaction('img','readonly'), r=t.objectStore('img').get(id);
+    r.onsuccess=function(){res(r.result||'')}; r.onerror=function(){res('')};
+  })}).catch(function(){return ''});
+}
+function imgDel(id){
+  return idb().then(function(db){return new Promise(function(res){
+    var t=db.transaction('img','readwrite');
+    t.objectStore('img').delete(id);
+    t.oncomplete=function(){res()}; t.onerror=function(){res()};
+  })}).catch(function(){});
+}
+function imgAll(){
+  return idb().then(function(db){return new Promise(function(res){
+    var t=db.transaction('img','readonly'), s=t.objectStore('img'),
+        ks=s.getAllKeys(), vs=s.getAll(), out={};
+    t.oncomplete=function(){
+      (ks.result||[]).forEach(function(k,i){out[k]=(vs.result||[])[i]});
+      res(out);
+    };
+    t.onerror=function(){res({})};
+  })}).catch(function(){return {}});
+}
+/* 保存用の縮小画像を作る。文字が読める範囲でできるだけ軽くする */
+function makeThumb(cv){
+  var MAX=760;
+  var sc=Math.min(1,MAX/Math.max(cv.width,cv.height));
+  var o=document.createElement('canvas');
+  o.width=Math.max(1,Math.round(cv.width*sc));
+  o.height=Math.max(1,Math.round(cv.height*sc));
+  var cx=o.getContext('2d');
+  cx.drawImage(cv,0,0,o.width,o.height);
+  var d=cx.getImageData(0,0,o.width,o.height), a=d.data, i;
+  for(i=0;i<a.length;i+=4){                     /* グレー化。色情報を捨てる分だけ軽くなる */
+    var g=(0.299*a[i]+0.587*a[i+1]+0.114*a[i+2])|0;
+    a[i]=a[i+1]=a[i+2]=g;
+  }
+  cx.putImageData(d,0,0);
+  return o.toDataURL('image/jpeg',0.5);
+}
 
 /* ============ タブ ============ */
 function tab(id){
@@ -575,7 +644,8 @@ function runOcr(cv){
   setBar(0.03); setStat('画像を処理しています…');
   onProgress=true;
   setTimeout(function(){
-    var img;
+    var img,thumb='';
+    try{ thumb=makeThumb(cv) }catch(e){}      /* 保存用のレシート画像 */
     try{ img=preprocess(cv) }catch(e){ img=cv }
     setBar(0.15); setStat('文字認識の準備中…');
     getWorker().then(function(w){
@@ -586,31 +656,31 @@ function runOcr(cv){
       setStat(t.replace(/\s/g,'').length<10?
         '文字をほとんど読み取れませんでした。明るい場所で、レシートを画面いっぱいに写すと改善します。':
         '読み取り完了。内容を確認して保存してください。');
-      finishOcr(t);
+      finishOcr(t,thumb);
     }).catch(function(e){
       if(window.Tesseract&&Tesseract.recognize){
         Tesseract.recognize(img,'jpn',{logger:tessLog}).then(function(r){
           setBar(1); setStat('読み取り完了。内容を確認して保存してください。');
-          finishOcr((r&&r.data&&r.data.text)||'');
+          finishOcr((r&&r.data&&r.data.text)||'',thumb);
         }).catch(function(){
           setBar(null); setStat('自動読み取りができませんでした。手入力で保存してください。');
-          finishOcr('');
+          finishOcr('',thumb);
         });
       }else{
         setBar(null); setStat('自動読み取りができませんでした。手入力で保存してください。');
-        finishOcr('');
+        finishOcr('',thumb);
       }
     });
   },50);
 }
-function finishOcr(text){
+function finishOcr(text,thumb){
   setTimeout(function(){setBar(null)},900);
   var p=parseReceipt(text);
   var known=matchKnownShop(text);
   if(known)p.shop=known;
   openSheet({id:null,type:'exp',date:p.date,amount:p.amount,shop:p.shop,
              cat:guessCat((known||p.shop)+' '+text),acct:defaultAcct('exp'),
-             memo:'',ocr:text});
+             memo:'',ocr:text,thumb:thumb||''});
 }
 
 /* ============ レシート解析 ============ */
@@ -851,16 +921,30 @@ var TYPES=[['exp','支出'],['inc','収入'],['trf','振替']];
 function defaultAcct(type){
   return accs.length?accs[0].id:'';
 }
+function showImg(data){
+  if(cur)cur.thumb=data||'';
+  var el=document.getElementById('fImg');
+  el.classList.remove('zoom');
+  el.src=data||'';
+  document.getElementById('imgWrap').classList.toggle('hide',!data);
+}
+function dropImg(){
+  if(!confirm('この明細のレシート画像を削除しますか？'))return;
+  showImg('');
+  if(cur&&cur.id)imgDel(cur.id);
+}
 function openSheet(r){
-  cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp'};
+  cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp',thumb:''};
   document.getElementById('shTitle').textContent=r.id?'明細を編集':(r.ocr?'明細の確認':'手入力で追加');
   document.getElementById('fDate').value=r.date||todayIso();
   document.getElementById('fAmt').value=r.amount||'';
   document.getElementById('fShop').value=r.shop||'';
   document.getElementById('fMemo').value=r.memo||'';
-  document.getElementById('fOcr').value=r.ocr||'';
-  document.getElementById('ocrWrap').classList.toggle('hide',!r.ocr);
   document.getElementById('delWrap').classList.toggle('hide',!r.id);
+  showImg(r.thumb||'');
+  if(!r.thumb&&r.id&&r.hasImg){                 /* 保存済みの画像は後から読み込む */
+    imgGet(r.id).then(function(d){ if(cur&&cur.id===r.id)showImg(d) });
+  }
   fillAccSel('fAcct',r.acct||defaultAcct(cur.type));
   fillAccSel('fFrom',r.from||(accs[0]?accs[0].id:''));
   fillAccSel('fTo',  r.to  ||(accs[1]?accs[1].id:(accs[0]?accs[0].id:'')));
@@ -970,10 +1054,12 @@ function saveRec(){
     r.shop=document.getElementById('fShop').value.trim();
     r.cat=cur.cat;
     r.acct=document.getElementById('fAcct').value;
-    r.ocr=document.getElementById('fOcr').value.slice(0,3000);
     if(!r.acct){alert('口座を選んでください');return}
     if(cur.type==='exp'&&r.shop.length>=2){mem[r.shop]=r.cat;save(K_MEM,mem)}
   }
+  r.hasImg=!!cur.thumb;
+  if(cur.thumb)imgPut(r.id,cur.thumb).catch(function(){});
+  else if(cur.id)imgDel(cur.id);
   var i=-1,j;
   for(j=0;j<recs.length;j++)if(recs[j].id===r.id){i=j;break}
   if(i>=0)recs[i]=r; else recs.push(r);
@@ -986,6 +1072,7 @@ function delRec(){
   if(!cur.id||!confirm('この明細を削除しますか？'))return;
   var id=cur.id;
   recs=recs.filter(function(x){return x.id!==id});
+  imgDel(id);
   save(K_REC,recs); closeSheet(); refreshAll();
 }
 function addManual(){
@@ -1117,7 +1204,7 @@ function renderList(){
       html+='<div class="item" onclick="editRec(\''+r.id+'\')">'+
         '<span class="tag" style="background:'+c.c+'">'+esc(r.cat||'-')+'</span>'+
         '<span class="nm">'+esc(r.shop||'（名称なし）')+
-          ' <span class="sub">'+esc(accName(r.acct))+(r.memo?' / '+esc(r.memo):'')+'</span></span>'+
+          ' <span class="sub">'+(r.hasImg?'📷 ':'')+esc(accName(r.acct))+(r.memo?' / '+esc(r.memo):'')+'</span></span>'+
         '<span class="am'+(listMode==='inc'?' plus':'')+'">'+
           (listMode==='inc'?'+':'')+yen(r.amount)+'</span></div>';
     }
@@ -1172,7 +1259,7 @@ function editRec(id){
   for(var i=0;i<recs.length;i++)if(recs[i].id===id){
     var r=recs[i];
     openSheet({id:r.id,type:typeOf(r),date:r.date,amount:r.amount,shop:r.shop,cat:r.cat,
-               acct:r.acct,from:r.from,to:r.to,memo:r.memo,ocr:r.ocr});
+               acct:r.acct,from:r.from,to:r.to,memo:r.memo,hasImg:r.hasImg});
     return;
   }
 }
@@ -1408,8 +1495,16 @@ function exportCsv(){
   dl('家計簿_'+m+'.csv',csv,'text/csv;charset=utf-8');
 }
 function backup(){
-  dl('家計簿バックアップ_'+todayIso()+'.json',
-     JSON.stringify({recs:recs,cats:cats,icats:icats,accs:accs,mem:mem,balDate:balDate},null,1),'application/json');
+  var base={recs:recs,cats:cats,icats:icats,accs:accs,mem:mem,balDate:balDate};
+  imgAll().then(function(imgs){
+    var n=0,k; for(k in imgs)n++;
+    if(n&&!confirm('レシート画像 '+n+'件も一緒に保存しますか？\n（ファイルが大きくなります。「キャンセル」で明細のみ保存）')){
+      dl('家計簿バックアップ_'+todayIso()+'.json',JSON.stringify(base,null,1),'application/json');
+      return;
+    }
+    base.imgs=imgs;
+    dl('家計簿バックアップ_'+todayIso()+'.json',JSON.stringify(base),'application/json');
+  });
 }
 function restore(ev){
   var f=ev.target.files[0]; if(!f)return;
@@ -1426,7 +1521,10 @@ function restore(ev){
         if(r.type!=='trf'&&!r.acct)r.acct=accs[0].id;
       });
       save(K_REC,recs);save(K_CAT,cats);save(K_ICAT,icats);save(K_ACC,accs);save(K_MEM,mem);save(K_BDATE,balDate);
-      refreshAll(); alert('復元しました（'+recs.length+'件）');
+      var k,imgs=d.imgs||{},n=0;
+      for(k in imgs){imgPut(k,imgs[k]).catch(function(){});n++}
+      refreshAll();
+      alert('復元しました（明細 '+recs.length+'件'+(n?' / 画像 '+n+'件':'')+'）');
     }catch(e){alert('読み込めませんでした：'+e.message)}
   };
   fr.readAsText(f); ev.target.value='';
