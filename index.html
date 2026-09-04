@@ -341,9 +341,14 @@
     </div>
 
     <div class="fg"><label>メモ</label><input type="text" id="fMemo"></div>
-    <div class="fg hide" id="imgWrap"><label>レシート画像（タップで拡大）</label>
-      <img id="fImg" alt="レシート" onclick="this.classList.toggle('zoom')">
-      <div style="margin-top:6px"><button type="button" onclick="dropImg()">画像を削除</button></div>
+    <div class="fg" id="imgWrap"><label id="imgLbl">レシート画像</label>
+      <img id="fImg" class="hide" alt="レシート" onclick="this.classList.toggle('zoom')">
+      <div class="row" style="margin-top:6px">
+        <div><button type="button" id="imgAddBtn" style="width:100%"
+             onclick="document.getElementById('fileAdd').click()">レシート画像を追加</button></div>
+        <div id="imgDelWrap" class="hide"><button type="button" onclick="dropImg()" style="width:100%">画像を削除</button></div>
+      </div>
+      <input type="file" id="fileAdd" accept="image/*" class="hide" onchange="addImgFile(event)">
     </div>
     <div class="row" style="margin-top:14px">
       <div><button onclick="closeSheet()" style="width:100%">キャンセル</button></div>
@@ -933,13 +938,35 @@ function showImg(data){
   if(cur)cur.thumb=data||'';
   var el=document.getElementById('fImg');
   el.classList.remove('zoom');
-  el.src=data||'';
-  document.getElementById('imgWrap').classList.toggle('hide',!data);
+  if(data){el.src=data;el.classList.remove('hide')}
+  else{el.removeAttribute('src');el.classList.add('hide')}
+  document.getElementById('imgDelWrap').classList.toggle('hide',!data);
+  document.getElementById('imgAddBtn').textContent=data?'画像を差し替え':'レシート画像を追加';
+  document.getElementById('imgLbl').textContent=data?'レシート画像（タップで拡大）':'レシート画像';
 }
 function dropImg(){
   if(!confirm('この明細のレシート画像を削除しますか？'))return;
   showImg('');
-  if(cur&&cur.id)imgDel(cur.id);
+}
+/* 保存済みの明細にも、あとからレシート画像を付けられるようにする */
+function addImgFile(ev){
+  var f=ev.target.files[0]; ev.target.value='';
+  if(!f)return;
+  var openedFor=cur?cur.id:null, wasOpen=!!cur;
+  var fr=new FileReader();
+  fr.onload=function(){
+    var im=new Image();
+    im.onload=function(){
+      if(!cur||!wasOpen||cur.id!==openedFor)return;   /* 読み込み中に閉じられた場合は捨てる */
+      var cv=document.createElement('canvas');
+      cv.width=im.naturalWidth; cv.height=im.naturalHeight;
+      cv.getContext('2d').drawImage(im,0,0);
+      try{ showImg(makeThumb(cv)) }catch(e){ alert('画像を読み込めませんでした') }
+    };
+    im.onerror=function(){alert('画像を読み込めませんでした')};
+    im.src=fr.result;
+  };
+  fr.readAsDataURL(f);
 }
 function openSheet(r){
   cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp',thumb:''};
