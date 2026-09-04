@@ -238,13 +238,21 @@
     <div class="stat" id="sumDiff"></div>
   </div>
   <div class="panel">
-    <h2>支出のカテゴリ別</h2>
+    <h2>カテゴリ別</h2>
+    <div class="seg sm" style="margin-bottom:10px">
+      <button id="pi-exp" class="on" onclick="setPie('exp')"><span>支出</span></button>
+      <button id="pi-inc" onclick="setPie('inc')"><span>収入</span></button>
+    </div>
     <canvas id="donut" height="260" style="width:100%"></canvas>
     <div class="legend" id="sumLegend"></div>
   </div>
   <div class="panel">
-    <h2>月別推移（直近12ヶ月・支出）</h2>
-    <canvas id="trend" height="220" style="width:100%"></canvas>
+    <h2>月別推移（直近12ヶ月）</h2>
+    <canvas id="trend" height="240" style="width:100%"></canvas>
+    <div class="lg" style="justify-content:center;gap:6px;font-size:12px">
+      <span class="sw" style="background:#1d4ed8"></span><span>支出</span>
+      <span class="sw" style="background:#0f766e;margin-left:16px"></span><span>収入</span>
+    </div>
   </div>
 </section>
 
@@ -1265,15 +1273,22 @@ function editRec(id){
 }
 
 /* ============ 集計 ============ */
-function byCat(m){
+var pieMode='exp';                       /* カテゴリ別グラフに出す種別 */
+function setPie(t){
+  pieMode=t;
+  document.getElementById('pi-exp').classList.toggle('on',t==='exp');
+  document.getElementById('pi-inc').classList.toggle('on',t==='inc');
+  renderSum();
+}
+function byCat(m,type){
   var o={},out=[],k;
-  monthRecs(m,'exp').forEach(function(r){o[r.cat]=(o[r.cat]||0)+r.amount});
+  monthRecs(m,type||'exp').forEach(function(r){o[r.cat]=(o[r.cat]||0)+r.amount});
   for(k in o)out.push([k,o[k]]);
   return out.sort(function(a,b){return b[1]-a[1]});
 }
-function legendHtml(list,tot){
+function legendHtml(list,tot,type){
   return list.map(function(e){
-    var c=catOf(e[0]), p=tot?e[1]/tot*100:0;
+    var c=(type==='inc')?icatOf(e[0]):catOf(e[0]), p=tot?e[1]/tot*100:0;
     return '<div class="lg"><span class="sw" style="background:'+c.c+'"></span>'+
       '<span class="n">'+esc(e[0])+
         '<div class="track"><i style="width:'+p.toFixed(1)+'%;background:'+c.c+'"></i></div></span>'+
@@ -1299,7 +1314,8 @@ function prevMonth(m){
 function renderSum(){
   document.getElementById('balBody').innerHTML=balanceHtml();
   var ss=document.getElementById('sSel'); fillMonthSel(ss);
-  var m=ss.value, list=byCat(m), tot=sumOf(m,'exp'), inc=sumOf(m,'inc');
+  var m=ss.value, tot=sumOf(m,'exp'), inc=sumOf(m,'inc');
+  var pieList=byCat(m,pieMode), pieTot=(pieMode==='inc')?inc:tot;
   document.getElementById('sumTot').textContent=yen(tot);
   document.getElementById('sumInc').textContent=yen(inc);
   var net=document.getElementById('sumNet');
@@ -1308,8 +1324,9 @@ function renderSum(){
   var pt=sumOf(prevMonth(m),'exp');
   document.getElementById('sumDiff').textContent=pt?
     ('支出は前月 '+yen(pt)+' → 差額 '+(tot>=pt?'+':'-')+yen(Math.abs(tot-pt))):'前月のデータはありません';
-  document.getElementById('sumLegend').innerHTML=legendHtml(list,tot)||'<div class="empty">データなし</div>';
-  drawDonut(list,tot); drawTrend(m);
+  document.getElementById('sumLegend').innerHTML=
+    legendHtml(pieList,pieTot,pieMode)||'<div class="empty">データなし</div>';
+  drawDonut(pieList,pieTot,pieMode); drawTrend(m);
 }
 function prep(cv,h){
   var r=window.devicePixelRatio||1, w=cv.clientWidth||520;
@@ -1318,17 +1335,17 @@ function prep(cv,h){
   x.setTransform(r,0,0,r,0,0); x.clearRect(0,0,w,h);
   return {x:x,w:w,h:h};
 }
-function drawDonut(list,tot){
+function drawDonut(list,tot,type){
   var g=prep(document.getElementById('donut'),260), x=g.x;
   if(!tot){
     x.fillStyle='#9aa4b2'; x.font='13px sans-serif'; x.textAlign='center';
-    x.fillText('データなし',g.w/2,g.h/2); return;
+    x.fillText((type==='inc'?'収入':'支出')+'のデータがありません',g.w/2,g.h/2); return;
   }
   var cx=g.w/2, cy=g.h/2, R=Math.min(g.w,g.h)/2-14, r0=R*0.58, a=-Math.PI/2;
   list.forEach(function(e){
     var sw=e[1]/tot*Math.PI*2;
     x.beginPath(); x.moveTo(cx,cy); x.arc(cx,cy,R,a,a+sw); x.closePath();
-    x.fillStyle=catOf(e[0]).c; x.fill();
+    x.fillStyle=((type==='inc')?icatOf(e[0]):catOf(e[0])).c; x.fill();
     a+=sw;
   });
   x.globalCompositeOperation='destination-out';
@@ -1337,27 +1354,42 @@ function drawDonut(list,tot){
   x.fillStyle='#1f2937'; x.textAlign='center'; x.font='bold 18px sans-serif';
   x.fillText(yen(tot),cx,cy+4);
   x.fillStyle='#6b7280'; x.font='11px sans-serif';
-  x.fillText('支出合計',cx,cy+20);
+  x.fillText((type==='inc'?'収入':'支出')+'合計',cx,cy+20);
 }
+/* 各月の支出と収入を左右に並べて比べられるようにする */
 function drawTrend(m){
-  var g=prep(document.getElementById('trend'),220), x=g.x;
+  var g=prep(document.getElementById('trend'),240), x=g.x;
   var ms=[],cm=m,i;
   for(i=0;i<12;i++){ms.unshift(cm);cm=prevMonth(cm)}
-  var vals=ms.map(function(mm){return sumOf(mm,'exp')});
-  var max=Math.max.apply(null,vals.concat([1]));
-  var padL=8,padB=24,padT=14, bw=(g.w-padL*2)/12;
-  vals.forEach(function(v,i){
-    var bh=(g.h-padB-padT)*(v/max);
-    var bx=padL+i*bw+bw*0.18, by=g.h-padB-bh;
-    x.fillStyle=(ms[i]===m)?'#1d4ed8':'#c7d2e5';
-    x.fillRect(bx,by,bw*0.64,Math.max(bh,1));
+  var ex =ms.map(function(mm){return sumOf(mm,'exp')});
+  var inc=ms.map(function(mm){return sumOf(mm,'inc')});
+  var max=Math.max.apply(null,ex.concat(inc).concat([1]));
+
+  var padL=6,padR=6,padB=28,padT=20;
+  var base=g.h-padB, slot=(g.w-padL-padR)/12, bw=slot*0.32, gap=slot*0.06;
+
+  x.strokeStyle='#e5e9f0'; x.lineWidth=1;              /* 上限の目安線 */
+  x.beginPath(); x.moveTo(padL,padT); x.lineTo(g.w-padR,padT); x.stroke();
+  x.beginPath(); x.moveTo(padL,base); x.lineTo(g.w-padR,base); x.stroke();
+  x.fillStyle='#9aa4b2'; x.font='9px sans-serif'; x.textAlign='left';
+  x.fillText(yen(max),padL+1,padT-5);
+
+  ms.forEach(function(mm,i){
+    var c=padL+slot*i+slot/2, sel=(mm===m);
+    var h1=(base-padT)*(ex[i]/max), h2=(base-padT)*(inc[i]/max);
+    x.fillStyle=sel?'#1d4ed8':'#a9bfe6';
+    if(ex[i])x.fillRect(c-bw-gap/2, base-h1, bw, Math.max(h1,1));
+    x.fillStyle=sel?'#0f766e':'#8fcac2';
+    if(inc[i])x.fillRect(c+gap/2, base-h2, bw, Math.max(h2,1));
     x.textAlign='center';
-    if(v){
-      x.fillStyle='#6b7280'; x.font='9px sans-serif';
-      x.fillText(Math.round(v/1000)+'k',bx+bw*0.32,by-3);
+    x.fillStyle=sel?'#1f2937':'#9aa4b2';
+    x.font=sel?'bold 9px sans-serif':'9px sans-serif';
+    x.fillText(mm.slice(5)+'月',c,g.h-11);
+    if(sel){                                            /* 選択月だけ金額を出す */
+      x.font='9px sans-serif';
+      if(ex[i]){x.fillStyle='#1d4ed8';x.fillText(Math.round(ex[i]/1000)+'k',c-bw/2-gap/2,base-h1-4)}
+      if(inc[i]){x.fillStyle='#0f766e';x.fillText(Math.round(inc[i]/1000)+'k',c+bw/2+gap/2,base-h2-4)}
     }
-    x.fillStyle='#9aa4b2'; x.font='9px sans-serif';
-    x.fillText(ms[i].slice(5)+'月',bx+bw*0.32,g.h-8);
   });
 }
 
