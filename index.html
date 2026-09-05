@@ -91,8 +91,9 @@
   .bal .nm{display:flex;align-items:center;gap:8px;min-width:0}
   .bal .v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
   .bal.sum{border-bottom:none;border-top:2px solid var(--ink);margin-top:12px;padding-top:12px;
-           font-size:15px;font-weight:700}
-  .bal.sum .v{font-size:26px}
+           font-size:13px;font-weight:700}
+  /* 金額は一覧タブの日付合計（.day .dt）と同じ大きさに揃える */
+  .bal.sum .v{font-size:17px;letter-spacing:.01em}
   .neg{color:var(--out)}
   /* 種別の小計は帯付き・大きめ。口座明細は一覧タブと同じ .item を使う */
   .kind{display:flex;justify-content:space-between;align-items:baseline;
