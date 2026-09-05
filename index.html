@@ -94,15 +94,12 @@
            font-size:15px;font-weight:700}
   .bal.sum .v{font-size:26px}
   .neg{color:var(--out)}
-  /* 種別の小計は帯付き・大きめ。個別口座は小さく控えめにして区別する */
+  /* 種別の小計は帯付き・大きめ。口座明細は一覧タブと同じ .item を使う */
   .kind{display:flex;justify-content:space-between;align-items:baseline;
         margin:16px 0 2px;padding:7px 10px;background:#e8eef8;border-radius:6px;
         font-size:13px;color:var(--ink);font-weight:700}
   .kind:first-child{margin-top:2px}
   .kind .v{font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:.01em}
-  .bal.acc{padding:6px 4px 6px 14px;border-bottom:none;font-size:12px}
-  .bal.acc .tag{font-size:10px;padding:2px 6px}
-  .bal.acc .v{font-size:13px;font-weight:600;color:var(--sub)}
   /* グラフ凡例 */
   .legend{margin-top:10px}
   .lg{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
@@ -924,9 +921,10 @@ function balanceHtml(){
           '<span class="v'+(sub<0?' neg':'')+'">'+signed(sub)+'</span></div>';
     members.forEach(function(a){
       var b=balanceOf(a.id);
-      html+='<div class="bal acc" style="cursor:pointer" onclick="openAcct(\''+esc(a.id)+'\')" title="タップでこの口座の入出金を表示">'+
-            '<span class="nm"><span class="tag" style="background:'+a.c+'">'+esc(a.n)+'</span></span>'+
-            '<span class="v'+(b<0?' neg':'')+'">'+signed(b)+'</span></div>';
+      html+='<div class="item" onclick="openAcct(\''+esc(a.id)+'\')" title="タップでこの口座の入出金を表示">'+
+            '<span class="tag" style="background:'+a.c+'">'+esc(a.n)+'</span>'+
+            '<span class="nm"></span>'+
+            '<span class="am'+(b<0?' neg':'')+'">'+signed(b)+'</span></div>';
     });
   });
   var t=totalBalance();
