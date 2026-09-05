@@ -1,58 +1,51 @@
-/* レシート家計簿 オフライン用 Service Worker
-   - アプリ本体は「まずネット、ダメならキャッシュ」＝更新がすぐ反映される
-   - 文字認識のデータ(CDN)は「まずキャッシュ」＝2回目以降は通信せず即座に動く */
-var APP = 'kakeibo-app-v1';
-var LIB = 'kakeibo-lib-v1';
-var CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+/* 有給休暇 確認アプリ － オフライン用（ホーム画面からアプリとして起動するため） */
+const CACHE = 'yukyu-v1';
+const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon.svg'];
 
-self.addEventListener('install', function (e) {
-  e.waitUntil(
-    caches.open(APP).then(function (c) { return c.addAll(CORE); })
-      .then(function () { return self.skipWaiting(); })
-  );
+self.addEventListener('install', function(ev){
+  ev.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(SHELL); }).then(function(){
+    return self.skipWaiting();
+  }));
 });
 
-self.addEventListener('activate', function (e) {
-  e.waitUntil(
-    caches.keys().then(function (keys) {
-      return Promise.all(keys.map(function (k) {
-        if (k !== APP && k !== LIB) { return caches.delete(k); }
-      }));
-    }).then(function () { return self.clients.claim(); })
-  );
+self.addEventListener('activate', function(ev){
+  ev.waitUntil(caches.keys().then(function(keys){
+    return Promise.all(keys.filter(function(k){ return k !== CACHE; })
+                           .map(function(k){ return caches.delete(k); }));
+  }).then(function(){ return self.clients.claim(); }));
 });
 
-self.addEventListener('fetch', function (e) {
-  var req = e.request;
-  if (req.method !== 'GET') { return; }
-  var url = new URL(req.url);
-
-  if (url.origin === self.location.origin) {
-    e.respondWith(
-      fetch(req).then(function (res) {
-        var copy = res.clone();
-        caches.open(APP).then(function (c) { c.put(req, copy); });
+/* データ（yukyu-secure.js）とページ本体は「まずネットワーク」＝更新をすぐ反映。
+   つながらないときだけキャッシュを使う。画像などは「まずキャッシュ」。 */
+self.addEventListener('fetch', function(ev){
+  const req = ev.request;
+  if(req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const fresh = req.mode === 'navigate'
+             || url.pathname.endsWith('/index.html')
+             || url.pathname.endsWith('yukyu-secure.js')
+             || url.pathname.endsWith('yukyu-data.js');
+  if(fresh){
+    ev.respondWith(
+      fetch(req).then(function(res){
+        const copy = res.clone();
+        caches.open(CACHE).then(function(c){ c.put(req, copy); });
         return res;
-      }).catch(function () {
-        return caches.match(req).then(function (r) {
-          return r || caches.match('./index.html');
+      }).catch(function(){
+        return caches.match(req).then(function(hit){
+          return hit || caches.match('./index.html');
         });
       })
     );
-    return;
+  } else {
+    ev.respondWith(
+      caches.match(req).then(function(hit){
+        return hit || fetch(req).then(function(res){
+          const copy = res.clone();
+          caches.open(CACHE).then(function(c){ c.put(req, copy); });
+          return res;
+        });
+      })
+    );
   }
-
-  /* CDN上の認識エンジン・日本語データ。一度取得したら以後は通信しない */
-  e.respondWith(
-    caches.match(req).then(function (hit) {
-      if (hit) { return hit; }
-      return fetch(req).then(function (res) {
-        if (res && (res.status === 200 || res.type === 'opaque')) {
-          var copy = res.clone();
-          caches.open(LIB).then(function (c) { c.put(req, copy); });
-        }
-        return res;
-      });
-    })
-  );
 });
