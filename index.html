@@ -65,10 +65,12 @@
   .seg.sm button{flex-direction:row;padding:8px 4px;font-size:13px}
   .seg.sm button.on{font-weight:700}
   /* 一覧 */
+  /* 日付ごとの合計は帯付き・大きめにして、明細行と見分けられるようにする */
   .day{display:flex;justify-content:space-between;align-items:baseline;
-       font-size:12px;color:var(--sub);font-weight:700;margin:14px 0 6px;
-       border-bottom:1px solid var(--line2);padding-bottom:4px}
-  .day .dt{font-variant-numeric:tabular-nums;color:var(--ink);font-size:13px}
+       font-size:12px;color:var(--ink);font-weight:700;margin:16px 0 2px;
+       padding:6px 10px;background:#e8eef8;border-radius:6px}
+  .day:first-child{margin-top:2px}
+  .day .dt{font-variant-numeric:tabular-nums;color:var(--ink);font-size:17px;letter-spacing:.01em}
   .am2{display:flex;flex-direction:column;align-items:flex-end;line-height:1.35}
   .am2 .sub{font-weight:400}
   .abar{display:flex;align-items:center;gap:8px;margin-top:10px}
@@ -88,14 +90,19 @@
   .bal{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line2)}
   .bal .nm{display:flex;align-items:center;gap:8px;min-width:0}
   .bal .v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .bal.sum{border-bottom:none;border-top:2px solid var(--line);margin-top:4px;padding-top:10px}
-  .bal.sum .v{font-size:20px}
+  .bal.sum{border-bottom:none;border-top:2px solid var(--ink);margin-top:12px;padding-top:12px;
+           font-size:15px;font-weight:700}
+  .bal.sum .v{font-size:26px}
   .neg{color:var(--out)}
+  /* 種別の小計は帯付き・大きめ。個別口座は小さく控えめにして区別する */
   .kind{display:flex;justify-content:space-between;align-items:baseline;
-        font-size:11px;color:var(--sub);font-weight:700;margin:14px 0 2px;
-        border-bottom:1px solid var(--line2);padding-bottom:4px}
-  .kind .v{font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
-  .bal.acc{padding:7px 0 7px 10px;border-bottom:none}
+        margin:16px 0 2px;padding:7px 10px;background:#e8eef8;border-radius:6px;
+        font-size:13px;color:var(--ink);font-weight:700}
+  .kind:first-child{margin-top:2px}
+  .kind .v{font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .bal.acc{padding:6px 4px 6px 14px;border-bottom:none;font-size:12px}
+  .bal.acc .tag{font-size:10px;padding:2px 6px}
+  .bal.acc .v{font-size:13px;font-weight:600;color:var(--sub)}
   /* グラフ凡例 */
   .legend{margin-top:10px}
   .lg{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
