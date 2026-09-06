@@ -54,6 +54,12 @@
   .bar{height:6px;background:var(--line2);border-radius:3px;overflow:hidden;margin-top:8px}
   .bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
   .stat{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6}
+  /* AIが止まったことを知らせる帯。閉じるまで消えない */
+  .warn{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:8px;
+        padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.7}
+  .warn b{color:#7c2d12}
+  .warn button{margin-top:8px;font-size:12px;padding:6px 12px;
+               border-color:#fdba74;background:#fff;color:#9a3412}
   /* 支出/収入/振替の切り替え */
   .seg{display:flex;gap:6px}
   .seg button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
@@ -152,6 +158,7 @@
 
 <!-- ===== 撮影 ===== -->
 <section id="pg-cam">
+  <div class="warn hide" id="aiWarn"></div>
   <div class="panel">
     <div class="stage" id="stage">
       <video id="video" playsinline muted class="hide"></video>
@@ -384,7 +391,7 @@
 /* ============ 保存領域 ============ */
 var K_REC='kakeibo_recs', K_CAT='kakeibo_cats', K_MEM='kakeibo_shopmem',
     K_ACC='kakeibo_accounts', K_ICAT='kakeibo_incats', K_BDATE='kakeibo_baldate',
-    K_AIKEY='kakeibo_aikey', K_AIMODEL='kakeibo_aimodel';
+    K_AIKEY='kakeibo_aikey', K_AIMODEL='kakeibo_aimodel', K_AIWARN='kakeibo_aiwarn';
 /* 1枚あたりの目安は、画像約1,440トークン＋指示約400＋出力約120で試算 */
 var AI_MODELS=[
  ['claude-haiku-4-5','Haiku 4.5（速い・約0.4円/枚）'],
@@ -420,7 +427,8 @@ function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){alert(
 var recs=load(K_REC,[]), cats=load(K_CAT,DEFAULT_CATS), mem=load(K_MEM,{}),
     accs=load(K_ACC,DEFAULT_ACCS), icats=load(K_ICAT,DEFAULT_ICATS),
     balDate=load(K_BDATE,''),            /* 残高の基準日。空なら全期間を集計 */
-    aiKey=load(K_AIKEY,''), aiModel=load(K_AIMODEL,'claude-haiku-4-5');
+    aiKey=load(K_AIKEY,''), aiModel=load(K_AIMODEL,'claude-haiku-4-5'),
+    aiWarn=load(K_AIWARN,'');            /* AIが止まった理由。閉じるまで残す */
 
 function yen(n){return '¥'+(n||0).toLocaleString('ja-JP')}
 function signed(n){return (n<0?'-¥':'¥')+Math.abs(n||0).toLocaleString('ja-JP')}
@@ -710,11 +718,17 @@ function callAi(cv){
     return r.text().then(function(t){
       var j=null; try{ j=JSON.parse(t) }catch(e){}
       if(!r.ok){
-        var m=(j&&j.error&&j.error.message)||('HTTP '+r.status);
-        if(r.status===401)m='APIキーが正しくありません';
-        if(r.status===429)m='短時間に送りすぎました。少し待って再試行してください';
-        if(r.status===400&&/credit|balance/i.test(m))m='APIの残高が不足しています';
-        throw new Error(m);
+        var raw=(j&&j.error&&j.error.message)||('HTTP '+r.status);
+        var m=raw, kind='';
+        /* 残高切れは状態コードが変わることがあるので本文で判定する */
+        if(/credit|balance|billing|insufficient|quota|purchase/i.test(raw)){
+          m='クレジット残高が不足しています'; kind='billing';
+        }else if(r.status===401||r.status===403){
+          m='APIキーが正しくありません（失効・削除された可能性）'; kind='key';
+        }else if(r.status===429){
+          m='短時間に送りすぎました。少し待つと再開します'; kind='rate';
+        }
+        var err=new Error(m); err.kind=kind; err.raw=raw; throw err;
       }
       var txt='';
       (j.content||[]).forEach(function(b){ if(b.type==='text')txt+=b.text });
@@ -728,10 +742,20 @@ function callAi(cv){
     });
   });
 }
+function setAiWarn(msg){
+  aiWarn=msg||''; save(K_AIWARN,aiWarn); renderAiWarn();
+}
+function renderAiWarn(){
+  var el=document.getElementById('aiWarn');
+  if(!el)return;
+  el.classList.toggle('hide',!aiWarn);
+  if(aiWarn)el.innerHTML=aiWarn+'<div><button onclick="setAiWarn(\'\')">閉じる</button></div>';
+}
 function runAi(cv,thumb){
   setBar(0.35); setStat('AIが読み取っています…');
   callAi(cv).then(function(d){
     setBar(1);
+    if(aiWarn)setAiWarn('');                       /* 復旧したら警告を消す */
     var amt=parseInt(d.amount,10)||0;
     var cat=(cats.some(function(c){return c.n===d.category})?d.category:cats[cats.length-1].n);
     var lv={high:'確信度：高',medium:'確信度：中',low:'確信度：低（画像を見て確認してください）'};
@@ -742,6 +766,17 @@ function runAi(cv,thumb){
       amount:amt||'', shop:d.shop||'', cat:cat,
       acct:defaultAcct('exp'), memo:d.memo||'', ocr:'', thumb:thumb||''});
   }).catch(function(e){
+    if(e.kind==='billing'){
+      setAiWarn('<b>AIでの読み取りが止まりました。</b><br>'+esc(e.message)+
+        '。<b>console.anthropic.com</b> の Billing からクレジットを追加すると、次の撮影から自動で再開します。<br>'+
+        'それまでは端末内の文字認識（無料）で動作します。');
+    }else if(e.kind==='key'){
+      setAiWarn('<b>AIでの読み取りが止まりました。</b><br>'+esc(e.message)+
+        '。設定タブでAPIキーを入れ直してください。<br>それまでは端末内の文字認識（無料）で動作します。');
+    }else if(e.kind!=='rate'){
+      setAiWarn('<b>AIでの読み取りに失敗しました。</b><br>'+esc(e.message)+
+        '<br>端末内の文字認識に切り替えて続行します。');
+    }
     setStat('AIで読み取れませんでした（'+e.message+'）。端末内の文字認識に切り替えます…');
     runTess(cv,thumb);                              /* 失敗しても手作業に戻さない */
   });
@@ -1762,6 +1797,7 @@ function restore(ev){
 
 /* ============ 起動 ============ */
 function refreshAll(){
+  renderAiWarn();
   renderQuick();
   if(!document.getElementById('pg-list').classList.contains('hide'))renderList();
   if(!document.getElementById('pg-sum').classList.contains('hide'))renderSum();
