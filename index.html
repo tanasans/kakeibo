@@ -690,8 +690,12 @@ function aiInstruction(){
     '・shop: 店舗名。支店名は含めてよい。\n'+
     '・amount: 実際に支払った合計金額。「小計」「お預り」「お釣り」ではなく「合計」の額。\n'+
     '・category: 次から最も適切なものを1つ選ぶ → '+cats.map(function(c){return c.n}).join('、')+'\n'+
+    '  カテゴリは「何を買ったか」ではなく「どこで・どう買ったか」で決める。\n'+
+    '  スーパー・コンビニ・ドラッグストア等で買った食品は、弁当・惣菜・寿司・パンなど調理済みのものでも「食費」。\n'+
+    '  「外食」は飲食店の店内飲食・テイクアウト・デリバリーのみ。\n'+
     '・confidence: 読み取りの確信度。\n'+
-    (known.length?'\n過去に登録された店名です。同じ店だと判断できる場合は、表記をこのとおりに合わせてください：\n'+known.join('、')+'\n':'')+
+    (known.length?'\n過去に登録された店名とカテゴリです。同じ店だと判断できる場合は、表記とカテゴリをこのとおりに合わせてください：\n'+
+      known.map(function(n){return n+'（'+mem[n]+'）'}).join('、')+'\n':'')+
     '\n推測で埋めず、読み取れない項目は空文字（金額は0）にしてください。';
 }
 function callAi(cv){
@@ -757,13 +761,18 @@ function runAi(cv,thumb){
     setBar(1);
     if(aiWarn)setAiWarn('');                       /* 復旧したら警告を消す */
     var amt=parseInt(d.amount,10)||0;
-    var cat=(cats.some(function(c){return c.n===d.category})?d.category:cats[cats.length-1].n);
+    var shop=d.shop||'';
+    var known=matchKnownShop(shop);                /* 記憶した表記に揃える */
+    if(known)shop=known;
+    /* 優先順位：記憶した店名 → キーワード → AIの判断 → その他
+       利用者が明示したルールをAIの推測より優先する */
+    var cat=ruleCat(shop)||(catExists(d.category)?d.category:cats[cats.length-1].n);
     var lv={high:'確信度：高',medium:'確信度：中',low:'確信度：低（画像を見て確認してください）'};
     setStat('AIが読み取りました。'+(lv[d.confidence]||''));
     setTimeout(function(){setBar(null)},900);
     openSheet({id:null,type:'exp',
       date:(/^\d{4}-\d{2}-\d{2}$/.test(d.date||'')?d.date:todayIso()),
-      amount:amt||'', shop:d.shop||'', cat:cat,
+      amount:amt||'', shop:shop, cat:cat,
       acct:defaultAcct('exp'), memo:d.memo||'', ocr:'', thumb:thumb||''});
   }).catch(function(e){
     if(e.kind==='billing'){
@@ -1038,6 +1047,30 @@ function amountCandidates(text){
     });
   });
   return vals.sort(function(a,b){return b-a}).slice(0,8);
+}
+/* 利用者が決めたルール（記憶した店名 → キーワード）だけでカテゴリを決める。
+   該当なしは null を返し、呼び出し側でAIの判断などにゆだねる。 */
+function catExists(n){return cats.some(function(c){return c.n===n})}
+function ruleCat(shop){
+  if(!shop)return null;
+  var t=z2h(shop).toLowerCase(), k, kk;
+  if(mem.hasOwnProperty(shop)&&catExists(mem[shop]))return mem[shop];
+  for(k in mem){                                   /* 支店名の有無などの表記差を吸収 */
+    kk=z2h(k).toLowerCase();
+    if(kk.length<2||!catExists(mem[k]))continue;
+    if(t.indexOf(kk)>=0||(t.length>=2&&kk.indexOf(t)>=0))return mem[k];
+  }
+  var near=matchKnownShop(shop);                   /* 読み取りの揺れも吸収 */
+  if(near&&catExists(mem[near]))return mem[near];
+  var hit=null,pos=1e9;
+  cats.forEach(function(c){
+    (c.k||'').split(',').forEach(function(w){
+      w=z2h(w.trim()).toLowerCase(); if(!w)return;
+      var i=t.indexOf(w);
+      if(i>=0&&i<pos){pos=i;hit=c.n}
+    });
+  });
+  return hit;
 }
 function guessCat(text){
   var t=z2h(text).toLowerCase(), k;
