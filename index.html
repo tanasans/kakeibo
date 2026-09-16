@@ -60,6 +60,14 @@
   .warn b{color:#7c2d12}
   .warn button{margin-top:8px;font-size:12px;padding:6px 12px;
                border-color:#fdba74;background:#fff;color:#9a3412}
+  /* 定期的な入出金・見通し */
+  .badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;
+         background:#fee2e2;color:#b91c1c;font-weight:700;margin-left:6px;vertical-align:1px}
+  .mini{padding:4px 9px;font-size:11px;margin-top:5px}
+  .item.fc{cursor:default}
+  .item.fc .nm{white-space:normal}
+  .item.short{background:#fef2f2}
+  .item.short .am2 .sub{color:var(--out);font-weight:700}
   /* 支出/収入/振替の切り替え */
   .seg{display:flex;gap:6px}
   .seg button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
@@ -132,10 +140,21 @@
   .note{font-size:11px;color:var(--sub);line-height:1.7;margin-top:8px}
   .catrow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
   .catrow input[type=color]{width:38px;padding:2px;flex:none;height:34px}
+  /* 入力欄は既定の最小幅が広く、スマホでは行が画面からはみ出してページ全体が横に広がる。
+     縮められるようにして、どの項目も画面内に収める */
+  .catrow input,.catrow select{min-width:0}
   .catrow .kw{flex:2}
-  .catrow .nm{flex:1;min-width:80px}
-  .catrow .num{flex:none;width:100px}
-  .catrow select{flex:none;width:110px}
+  .catrow .nm{flex:1}
+  .catrow .num{flex:0 1 92px;width:auto}
+  .catrow select{flex:0 1 96px;width:auto}
+  .catrow button{flex:none;padding:8px 10px}
+  /* 口座の行は項目が多いので2段にする：1段目 色・口座名・×／2段目 種別・残高 */
+  .catrow.acc{flex-wrap:wrap}
+  .catrow.acc .nm{flex:1 1 calc(100% - 92px)}
+  .catrow.acc button{order:1}
+  .catrow.acc select{order:2;flex:1 1 90px;margin-left:44px}
+  .catrow.acc .num{order:3;flex:1 1 110px}
+  .catrow.acc+.catrow.acc{margin-top:10px}
   /* 常時表示の追加ボタン */
   .fab{position:fixed;right:16px;bottom:16px;width:58px;height:58px;border-radius:50%;
        background:var(--accent);color:#fff;border:none;font-size:30px;line-height:1;padding:0;
@@ -159,6 +178,7 @@
 <!-- ===== 撮影 ===== -->
 <section id="pg-cam">
   <div class="warn hide" id="aiWarn"></div>
+  <div class="warn hide" id="balWarn"></div>
   <div class="panel">
     <div class="stage" id="stage">
       <video id="video" playsinline muted class="hide"></video>
@@ -241,6 +261,10 @@
     <div id="balBody"></div>
   </div>
   <div class="panel">
+    <h2>今後の入出金予定（60日）</h2>
+    <div id="fcBody"></div>
+  </div>
+  <div class="panel">
     <div class="row">
       <div><label>対象月</label><select id="sSel" onchange="renderSum()"></select></div>
     </div>
@@ -284,6 +308,24 @@
     <div class="note">
       <b>基準日</b>にその時点の実際の残高を「残高」欄に入力してください。<b>基準日当日以降</b>の入出金だけが加減算され、それより前の明細は残高に影響しません（基準日の残高にすでに含まれているため）。<br>
       基準日を空欄にすると、全期間の明細を集計します。
+    </div>
+  </div>
+  <div class="panel">
+    <h2>定期的な入出金（残高不足の警告）</h2>
+    <div id="recurList"></div>
+    <div class="row" style="margin-top:8px">
+      <div><button class="pri" onclick="openRecur(null)" style="width:100%">定期的な入出金を追加</button></div>
+    </div>
+    <div class="row" style="margin-top:12px;align-items:flex-end">
+      <div><label>警告ライン（この金額を下回る見込みで警告）</label>
+        <input type="number" id="warnLine" inputmode="numeric"></div>
+      <div style="flex:none;min-width:0"><button onclick="saveWarnLine()">保存</button></div>
+    </div>
+    <div class="stat" id="warnStat"></div>
+    <div class="note">
+      登録した支払い・入金を今日から<b>60日先</b>まで口座ごとに積み上げて残高を予測し、警告ラインを下回る見込みがあれば撮影タブの上部に警告を出します。<br>
+      給与など<b>定期的な収入も登録</b>しておくと、入金で持ち直す分まで含めて正しく見通せます。<br>
+      同じ口座・同じ金額の明細が予定日の前後5日以内にあれば、支払い済みとみなします。電気代など毎回金額が変わるものは、集計タブの予定から「記録する」か「処理済みにする」を押してください。
     </div>
   </div>
   <div class="panel">
@@ -387,11 +429,43 @@
   </div>
 </div>
 
+<!-- ===== 定期的な入出金の編集 ===== -->
+<div class="mask hide" id="rmask" onclick="if(event.target===this)closeRecur()">
+  <div class="sheet" id="rsheet">
+    <h3 id="rTitle">定期的な入出金</h3>
+    <div class="row">
+      <div class="fg"><label>種別</label>
+        <select id="rType" onchange="fillRecurCats()"><option value="exp">支出</option><option value="inc">収入</option></select></div>
+      <div class="fg"><label>金額（円）</label><input type="number" id="rAmt" inputmode="numeric"></div>
+    </div>
+    <div class="fg"><label>名称</label><input type="text" id="rName" placeholder="例：家賃、電気代、給与"></div>
+    <div class="row">
+      <div class="fg"><label>口座</label><select id="rAcct"></select></div>
+      <div class="fg"><label>カテゴリ</label><select id="rCat"></select></div>
+    </div>
+    <div class="row">
+      <div class="fg"><label>周期</label>
+        <select id="rFreq" onchange="applyRecurFreq()"><option value="month">毎月</option><option value="year">毎年</option></select></div>
+      <div class="fg" id="rMonthWrap"><label>月</label><select id="rMonth"></select></div>
+      <div class="fg"><label>日</label><select id="rDay"></select></div>
+    </div>
+    <div class="fg"><label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink)">
+      <input type="checkbox" id="rOn" style="width:auto"> 有効（見通しと警告に含める）</label></div>
+    <div class="row" style="margin-top:14px">
+      <div><button onclick="closeRecur()" style="width:100%">キャンセル</button></div>
+      <div id="rDelWrap" class="hide"><button class="danger" onclick="delRecur()" style="width:100%">削除</button></div>
+      <div><button class="pri" id="rSave" onclick="saveRecur()" style="width:100%">保存</button></div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============ 保存領域 ============ */
 var K_REC='kakeibo_recs', K_CAT='kakeibo_cats', K_MEM='kakeibo_shopmem',
     K_ACC='kakeibo_accounts', K_ICAT='kakeibo_incats', K_BDATE='kakeibo_baldate',
-    K_AIKEY='kakeibo_aikey', K_AIMODEL='kakeibo_aimodel', K_AIWARN='kakeibo_aiwarn';
+    K_AIKEY='kakeibo_aikey', K_AIMODEL='kakeibo_aimodel', K_AIWARN='kakeibo_aiwarn',
+    K_RECUR='kakeibo_recurs', K_RDONE='kakeibo_recurdone', K_WARNLINE='kakeibo_warnline',
+    K_BWSEEN='kakeibo_balwarn_closed';
 /* 1枚あたりの目安は、画像約1,440トークン＋指示約400＋出力約120で試算 */
 var AI_MODELS=[
  ['claude-haiku-4-5','Haiku 4.5（速い・約0.4円/枚）'],
@@ -428,7 +502,10 @@ var recs=load(K_REC,[]), cats=load(K_CAT,DEFAULT_CATS), mem=load(K_MEM,{}),
     accs=load(K_ACC,DEFAULT_ACCS), icats=load(K_ICAT,DEFAULT_ICATS),
     balDate=load(K_BDATE,''),            /* 残高の基準日。空なら全期間を集計 */
     aiKey=load(K_AIKEY,''), aiModel=load(K_AIMODEL,'claude-haiku-4-5'),
-    aiWarn=load(K_AIWARN,'');            /* AIが止まった理由。閉じるまで残す */
+    aiWarn=load(K_AIWARN,''),            /* AIが止まった理由。閉じるまで残す */
+    recurs=load(K_RECUR,[]),             /* 定期的な入出金 */
+    rdone=load(K_RDONE,{}),              /* 処理済みにした回（"id@日付"） */
+    warnLine=load(K_WARNLINE,0);         /* これを下回る見込みなら警告 */
 
 function yen(n){return '¥'+(n||0).toLocaleString('ja-JP')}
 function signed(n){return (n<0?'-¥':'¥')+Math.abs(n||0).toLocaleString('ja-JP')}
@@ -1132,6 +1209,256 @@ function balanceHtml(){
   return html;
 }
 
+/* ============ 定期的な入出金と残高の見通し ============
+   登録した定期の支払い・収入を今日から先の日付に展開し、口座ごとに残高を
+   日付順に積み上げて、警告ラインを下回る日があれば知らせる。 */
+var FC_DAYS=60;                                   /* 何日先まで見通すか */
+function pad2(n){return String(n).padStart(2,'0')}
+function isoOf(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())}
+function addDays(iso,n){var d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return isoOf(d)}
+function dayDiff(a,b){return Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/864e5)}
+function lastDay(y,m){return new Date(y,m,0).getDate()}
+function mdw(iso){return iso.slice(5).replace('-','/')+'（'+week(iso)+'）'}
+function recurText(it){
+  var d=(+it.day>=31)?'末日':(it.day+'日');
+  return (it.freq==='year'?('毎年'+it.month+'月'):'毎月')+d;
+}
+/* from〜to に来る予定日。31日（末日）指定は、その月の最終日に丸める */
+function occDates(it,from,to){
+  var out=[], f=from.split('-').map(Number), t=to.split('-').map(Number), y=f[0], m=f[1];
+  while(y<t[0]||(y===t[0]&&m<=t[1])){
+    if(it.freq!=='year'||+it.month===m){
+      var iso=y+'-'+pad2(m)+'-'+pad2(Math.min(+it.day||1,lastDay(y,m)));
+      if(iso>=from&&iso<=to)out.push(iso);
+    }
+    m++; if(m>12){m=1;y++}
+  }
+  return out;
+}
+function occKey(it,date){return it.id+'@'+date}
+function nextOcc(it){var t=todayIso();return occDates(it,t,addDays(t,400))[0]||''}
+/* その回が済んでいるか：処理済みにした／予定から記録した／
+   同じ種別・口座・金額の明細が予定日の前後5日にある */
+function occDone(it,date){
+  var key=occKey(it,date);
+  if(rdone[key])return true;
+  return recs.some(function(r){
+    if(r.recur===key)return true;
+    if(r.recur)return false;
+    return typeOf(r)===it.type&&r.acct===it.acct&&r.amount===+it.amount&&
+           Math.abs(dayDiff(r.date,date))<=5;
+  });
+}
+function forecast(){
+  var today=todayIso(), end=addDays(today,FC_DAYS), ev=[];
+  recurs.forEach(function(it){
+    if(!it.on||!accOf(it.acct)||!(+it.amount>0))return;
+    var from=today.slice(0,8)+'01';                  /* 今月の未処理分も拾う */
+    if(it.since&&it.since>from)from=it.since;        /* 登録する前の回は対象外 */
+    if(balDate&&balDate>from)from=balDate;           /* 基準日より前は残高に織り込み済み */
+    occDates(it,from,end).forEach(function(d){
+      if(occDone(it,d))return;
+      ev.push({it:it,date:d,eff:(d<today?today:d),overdue:d<today});
+    });
+  });
+  /* 同じ日は支出を先に引く。入金が後になる場合の不足も見逃さないよう厳しめに見る */
+  ev.sort(function(a,b){
+    return a.eff.localeCompare(b.eff)||
+      ((a.it.type==='exp'?0:1)-(b.it.type==='exp'?0:1))||a.date.localeCompare(b.date);
+  });
+  var run={}, short={};
+  ev.forEach(function(e){
+    var id=e.it.acct;
+    if(!(id in run))run[id]=balanceOf(id);
+    run[id]+=(e.it.type==='inc'?1:-1)*(+e.it.amount);
+    e.after=run[id];
+    e.below=(run[id]<(+warnLine||0));
+    if(e.below&&!short[id])short[id]=e;             /* 口座ごとに最初に下回る回 */
+  });
+  return {events:ev,short:short};
+}
+
+var lastFc=null;
+function renderForecast(){
+  var el=document.getElementById('fcBody'); if(!el)return;
+  if(!recurs.length){
+    el.innerHTML='<div class="empty">定期的な入出金が登録されていません。<br>'+
+      '設定タブで登録すると、今後の残高の見通しが表示されます。</div>';
+    return;
+  }
+  var fc=forecast(), today=todayIso();
+  lastFc=fc;
+  if(!fc.events.length){el.innerHTML='<div class="empty">今後'+FC_DAYS+'日の予定はありません。</div>';return}
+  var html='<div class="note" style="margin:0 0 6px">警告ライン '+signed(+warnLine||0)+
+    ' を下回る見込みの行は赤で表示します。</div>';
+  fc.events.forEach(function(e,i){
+    var it=e.it, inc=(it.type==='inc'), c=inc?icatOf(it.cat):catOf(it.cat);
+    html+='<div class="item fc'+(e.below?' short':'')+'">'+
+      '<span class="tag" style="background:'+c.c+'">'+esc(it.cat||'-')+'</span>'+
+      '<span class="nm">'+mdw(e.date)+' '+esc(it.n)+
+        (e.overdue?'<span class="badge">未処理</span>':'')+
+        ' <span class="sub">'+esc(accName(it.acct))+'</span>'+
+        (e.date<=today?'<br><button class="mini" onclick="recordOcc('+i+')">記録する</button> '+
+                       '<button class="mini" onclick="skipOcc('+i+')">処理済みにする</button>':'')+
+      '</span>'+
+      '<span class="am am2"><span class="'+(inc?'plus':'')+'">'+(inc?'+':'-')+yen(+it.amount)+'</span>'+
+        '<span class="sub">残高 '+signed(e.after)+'</span></span></div>';
+  });
+  el.innerHTML=html;
+}
+/* 予定から明細を作る。金額が変わるものに備えて入力画面で確認してから保存する */
+function recordOcc(i){
+  var e=lastFc&&lastFc.events[i]; if(!e)return;
+  var it=e.it;
+  openSheet({id:null,type:it.type,date:e.date,amount:+it.amount,shop:it.n,cat:it.cat,
+             acct:it.acct,memo:'定期：'+recurText(it),ocr:'',recur:occKey(it,e.date)});
+}
+function skipOcc(i){
+  var e=lastFc&&lastFc.events[i]; if(!e)return;
+  var it=e.it;
+  if(!confirm('次の予定を「処理済み」にします。\n\n'+
+      mdw(e.date)+'　'+it.n+'　'+yen(+it.amount)+'（'+accName(it.acct)+'）\n\n'+
+      '見通しと残高不足の警告から外れます。明細は作られないので、残高は変わりません。\n'+
+      '（別の方法ですでに記録済みのときに使ってください）'))return;
+  rdone[occKey(it,e.date)]=true; save(K_RDONE,rdone); refreshAll();
+}
+
+function renderBalWarn(){
+  var el=document.getElementById('balWarn'); if(!el)return;
+  if(!recurs.length){el.classList.add('hide');return}
+  var fc=forecast(), ids=Object.keys(fc.short);
+  if(!ids.length){el.classList.add('hide');return}
+  /* 内容が変わる・日が変わると、閉じていても再び出す */
+  var sig=todayIso()+'|'+ids.map(function(id){var e=fc.short[id];return id+e.date+e.after}).join(',');
+  if(load(K_BWSEEN,'')===sig){el.classList.add('hide');return}
+  el.innerHTML='<b>⚠ 残高不足になる見込みがあります</b>（警告ライン '+signed(+warnLine||0)+'）<br>'+
+    ids.map(function(id){
+      var e=fc.short[id];
+      return '<b>'+esc(accName(id))+'</b>：'+mdw(e.date)+' '+esc(e.it.n)+'（'+yen(+e.it.amount)+
+             '）の後、残高 <b>'+signed(e.after)+'</b>';
+    }).join('<br>')+
+    '<br>入金や振替で補充しておくと解消します。'+
+    '<div><button onclick="tab(\'sum\')">予定を見る</button> <button onclick="closeBalWarn()">今日は閉じる</button></div>';
+  el.dataset.sig=sig;
+  el.classList.remove('hide');
+}
+function closeBalWarn(){
+  var el=document.getElementById('balWarn');
+  save(K_BWSEEN,el.dataset.sig||''); el.classList.add('hide');
+}
+
+/* ---- 定期的な入出金の登録・編集 ---- */
+var rcur=null;
+function fillRecurCats(sel){
+  var t=document.getElementById('rType').value, list=(t==='inc')?icats:cats;
+  var el=document.getElementById('rCat'), keep=sel||el.value;
+  el.innerHTML=list.map(function(c){return '<option>'+esc(c.n)+'</option>'}).join('');
+  el.value=list.some(function(c){return c.n===keep})?keep:list[list.length-1].n;
+}
+function applyRecurFreq(){
+  document.getElementById('rMonthWrap').classList.toggle('hide',document.getElementById('rFreq').value!=='year');
+}
+function openRecur(i){
+  var it=(i===null||i===undefined)?null:recurs[i];
+  rcur={idx:it?i:null};
+  document.getElementById('rTitle').textContent=it?'定期的な入出金を編集':'定期的な入出金を追加';
+  document.getElementById('rType').value=it?it.type:'exp';
+  document.getElementById('rAmt').value=it?it.amount:'';
+  document.getElementById('rName').value=it?it.n:'';
+  fillAccSel('rAcct',it?it.acct:defaultAcct('exp'));
+  fillRecurCats(it?it.cat:'');
+  document.getElementById('rFreq').value=it?it.freq:'month';
+  var ms='',ds='',k;
+  for(k=1;k<=12;k++)ms+='<option value="'+k+'">'+k+'月</option>';
+  for(k=1;k<=30;k++)ds+='<option value="'+k+'">'+k+'日</option>';
+  document.getElementById('rMonth').innerHTML=ms;
+  document.getElementById('rDay').innerHTML=ds+'<option value="31">末日</option>';
+  var now=new Date();
+  document.getElementById('rMonth').value=String(it?(it.month||1):(now.getMonth()+1));
+  document.getElementById('rDay').value=String(it?it.day:Math.min(now.getDate(),30));
+  document.getElementById('rOn').checked=it?!!it.on:true;
+  document.getElementById('rDelWrap').classList.toggle('hide',!it);
+  applyRecurFreq();
+  document.getElementById('rmask').classList.remove('hide');
+  setTimeout(function(){document.getElementById('rType').focus()},50);
+}
+function closeRecur(){document.getElementById('rmask').classList.add('hide');rcur=null}
+function saveRecur(){
+  var name=document.getElementById('rName').value.trim();
+  var amt=parseInt(document.getElementById('rAmt').value,10);
+  var acct=document.getElementById('rAcct').value;
+  if(!amt||amt<=0){alert('金額を入力してください');document.getElementById('rAmt').focus();return}
+  if(!name){alert('名称を入力してください');document.getElementById('rName').focus();return}
+  if(!acct){alert('口座を選んでください');return}
+  var old=(rcur.idx!==null)?recurs[rcur.idx]:null;
+  var it={
+    id:old?old.id:uid(),
+    type:document.getElementById('rType').value,
+    n:name, amount:amt, acct:acct,
+    cat:document.getElementById('rCat').value,
+    freq:document.getElementById('rFreq').value,
+    month:parseInt(document.getElementById('rMonth').value,10)||1,
+    day:parseInt(document.getElementById('rDay').value,10)||1,
+    on:document.getElementById('rOn').checked,
+    since:old?old.since:todayIso()               /* 登録日より前の回は見通しに入れない */
+  };
+  if(old)recurs[rcur.idx]=it; else recurs.push(it);
+  save(K_RECUR,recurs);
+  closeRecur(); refreshAll();
+}
+function delRecur(){
+  var it=rcur&&recurs[rcur.idx]; if(!it)return;
+  var nx=nextOcc(it);
+  if(!confirm('次の定期的な入出金を削除します。\n\n'+
+      (it.type==='inc'?'収入':'支出')+'　'+it.n+'　'+yen(+it.amount)+'\n'+
+      recurText(it)+'／'+accName(it.acct)+(nx?'\n次回予定：'+nx.replace(/-/g,'/'):'')+'\n\n'+
+      '今後の見通しと残高不足の警告から外れます。\n'+
+      'これまでに記録した明細は削除されず、残高も変わりません。'))return;
+  var id=it.id;
+  recurs.splice(rcur.idx,1); save(K_RECUR,recurs);
+  Object.keys(rdone).forEach(function(k){ if(k.indexOf(id+'@')===0)delete rdone[k] });
+  save(K_RDONE,rdone);
+  closeRecur(); refreshAll();
+}
+function renderRecurList(){
+  var el=document.getElementById('recurList'); if(!el)return;
+  document.getElementById('warnLine').value=+warnLine||0;
+  if(!recurs.length){
+    el.innerHTML='<div class="empty">まだありません。<br>家賃・光熱費・保険料・給与などを登録してください。</div>';
+    return;
+  }
+  el.innerHTML=recurs.map(function(it,i){
+    var inc=(it.type==='inc'), c=inc?icatOf(it.cat):catOf(it.cat), nx=nextOcc(it);
+    return '<div class="item" onclick="openRecur('+i+')"'+(it.on?'':' style="opacity:.5"')+'>'+
+      '<span class="tag" style="background:'+c.c+'">'+(inc?'収入':'支出')+'</span>'+
+      '<span class="nm">'+esc(it.n)+' <span class="sub">'+recurText(it)+'／'+esc(accName(it.acct))+
+        (it.on?(nx?'／次回 '+nx.slice(5).replace('-','/'):''):'／停止中')+'</span></span>'+
+      '<span class="am'+(inc?' plus':'')+'">'+(inc?'+':'')+yen(+it.amount)+'</span></div>';
+  }).join('');
+}
+function saveWarnLine(){
+  warnLine=parseInt(document.getElementById('warnLine').value,10)||0;
+  save(K_WARNLINE,warnLine); save(K_BWSEEN,''); refreshAll();
+  document.getElementById('warnStat').textContent='保存しました。';
+}
+
+/* 入力はEnterで次の項目へ。表示だけの欄は飛ばし、最後は保存ボタンに移る（押すのは本人） */
+function enterNav(root,lastBtnId){
+  if(!root)return;
+  root.addEventListener('keydown',function(e){
+    if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return;
+    var t=e.target;
+    if(!t||t.tagName==='TEXTAREA'||t.tagName==='BUTTON')return;
+    var list=[].filter.call(root.querySelectorAll('input,select,textarea,button'),function(el){
+      return !el.disabled&&!el.readOnly&&el.tabIndex!==-1&&el.offsetParent!==null&&
+             (el.tagName!=='BUTTON'||el.id===lastBtnId);
+    });
+    var i=list.indexOf(t); if(i<0)return;
+    e.preventDefault();
+    if(list[i+1])list[i+1].focus();
+  });
+}
+
 /* ============ 入力シート ============ */
 var cur=null, curAmts=[], curShops=[];
 var TYPES=[['exp','支出'],['inc','収入'],['trf','振替']];
@@ -1174,7 +1501,7 @@ function addImgFile(ev){
   fr.readAsDataURL(f);
 }
 function openSheet(r){
-  cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp',thumb:''};
+  cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp',thumb:'',recur:r.recur||''};
   document.getElementById('shTitle').textContent=r.id?'明細を編集':(r.ocr?'明細の確認':'手入力で追加');
   document.getElementById('fDate').value=r.date||todayIso();
   document.getElementById('fAmt').value=r.amount||'';
@@ -1298,6 +1625,7 @@ function saveRec(){
     if(cur.type==='exp'&&r.shop.length>=2){mem[r.shop]=r.cat;save(K_MEM,mem)}
   }
   r.hasImg=!!cur.thumb;
+  if(cur.recur)r.recur=cur.recur;                  /* 定期の予定から作った明細の目印 */
   if(cur.thumb)imgPut(r.id,cur.thumb).catch(function(){});
   else if(cur.id)imgDel(cur.id);
   var i=-1,j;
@@ -1499,7 +1827,7 @@ function editRec(id){
   for(var i=0;i<recs.length;i++)if(recs[i].id===id){
     var r=recs[i];
     openSheet({id:r.id,type:typeOf(r),date:r.date,amount:r.amount,shop:r.shop,cat:r.cat,
-               acct:r.acct,from:r.from,to:r.to,memo:r.memo,hasImg:r.hasImg});
+               acct:r.acct,from:r.from,to:r.to,memo:r.memo,hasImg:r.hasImg,recur:r.recur});
     return;
   }
 }
@@ -1545,6 +1873,7 @@ function prevMonth(m){
 }
 function renderSum(){
   document.getElementById('balBody').innerHTML=balanceHtml();
+  renderForecast();
   var ss=document.getElementById('sSel'); fillMonthSel(ss);
   var m=ss.value, tot=sumOf(m,'exp'), inc=sumOf(m,'inc');
   var pieList=byCat(m,pieMode), pieTot=(pieMode==='inc')?inc:tot;
@@ -1658,13 +1987,14 @@ function testAi(){
   });
 }
 function renderSet(){
+  renderRecurList();
   document.getElementById('aiKey').value=aiKey||'';
   document.getElementById('aiModel').innerHTML=AI_MODELS.map(function(m){
     return '<option value="'+m[0]+'"'+(m[0]===aiModel?' selected':'')+'>'+m[1]+'</option>';
   }).join('');
   document.getElementById('balDate').value=balDate||'';
   document.getElementById('accEdit').innerHTML=accs.map(function(a,i){
-    return '<div class="catrow">'+
+    return '<div class="catrow acc">'+
       '<input type="color" value="'+a.c+'" data-i="'+i+'" data-f="c">'+
       '<input class="nm" value="'+esc(a.n)+'" data-i="'+i+'" data-f="n" placeholder="口座名">'+
       '<select data-i="'+i+'" data-f="k">'+KINDS.map(function(k){
@@ -1793,7 +2123,8 @@ function exportCsv(){
   dl('家計簿_'+m+'.csv',csv,'text/csv;charset=utf-8');
 }
 function backup(){
-  var base={recs:recs,cats:cats,icats:icats,accs:accs,mem:mem,balDate:balDate};
+  var base={recs:recs,cats:cats,icats:icats,accs:accs,mem:mem,balDate:balDate,
+            recurs:recurs,rdone:rdone,warnLine:warnLine};
   imgAll().then(function(imgs){
     var n=0,k; for(k in imgs)n++;
     if(n&&!confirm('レシート画像 '+n+'件も一緒に保存しますか？\n（ファイルが大きくなります。「キャンセル」で明細のみ保存）')){
@@ -1814,6 +2145,8 @@ function restore(ev){
       if(!confirm('現在のデータを置き換えます。よろしいですか？'))return;
       recs=d.recs; cats=d.cats||cats; icats=d.icats||icats; accs=d.accs||accs; mem=d.mem||{};
       balDate=d.balDate||'';
+      recurs=d.recurs||[]; rdone=d.rdone||{}; warnLine=d.warnLine||0;
+      save(K_RECUR,recurs); save(K_RDONE,rdone); save(K_WARNLINE,warnLine);
       recs.forEach(function(r){                       /* 旧バックアップも今の形に合わせる */
         if(!r.type)r.type='exp';
         if(r.type!=='trf'&&!r.acct)r.acct=accs[0].id;
@@ -1831,6 +2164,7 @@ function restore(ev){
 /* ============ 起動 ============ */
 function refreshAll(){
   renderAiWarn();
+  renderBalWarn();
   renderQuick();
   if(!document.getElementById('pg-list').classList.contains('hide'))renderList();
   if(!document.getElementById('pg-sum').classList.contains('hide'))renderSum();
@@ -1844,6 +2178,7 @@ if('serviceWorker' in navigator && window.isSecureContext){
     navigator.serviceWorker.register('./sw.js').catch(function(){});
   });
 }
+enterNav(document.getElementById('rsheet'),'rSave');
 refreshAll();
 </script>
 </body>
