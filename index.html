@@ -325,7 +325,7 @@
     <div class="note">
       登録した支払い・入金を今日から<b>60日先</b>まで口座ごとに積み上げて残高を予測し、警告ラインを下回る見込みがあれば撮影タブの上部に警告を出します。<br>
       給与など<b>定期的な収入も登録</b>しておくと、入金で持ち直す分まで含めて正しく見通せます。<br>
-      同じ口座・同じ金額の明細が予定日の前後5日以内にあれば、支払い済みとみなします。電気代など毎回金額が変わるものは、集計タブの予定から「記録する」か「処理済みにする」を押してください。
+      同じ口座・同じ金額の明細が予定日の前後5日以内にあれば、支払い済みとみなします（土日祝で日がずれる年金なども対象）。電気代など毎回金額が変わるものは、集計タブの予定から「記録する」か「処理済みにする」を押してください。
     </div>
   </div>
   <div class="panel">
@@ -445,10 +445,14 @@
     </div>
     <div class="row">
       <div class="fg"><label>周期</label>
-        <select id="rFreq" onchange="applyRecurFreq()"><option value="month">毎月</option><option value="year">毎年</option></select></div>
-      <div class="fg" id="rMonthWrap"><label>月</label><select id="rMonth"></select></div>
+        <select id="rFreq" onchange="applyRecurFreq()">
+          <option value="1">毎月</option><option value="2">2か月ごと</option><option value="3">3か月ごと</option>
+          <option value="4">4か月ごと</option><option value="6">6か月ごと</option><option value="12">毎年</option>
+        </select></div>
+      <div class="fg" id="rMonthWrap"><label id="rMonthLbl">月</label><select id="rMonth" onchange="applyRecurFreq()"></select></div>
       <div class="fg"><label>日</label><select id="rDay"></select></div>
     </div>
+    <div class="stat" id="rMonthsHint" style="margin:-4px 0 8px"></div>
     <div class="fg"><label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink)">
       <input type="checkbox" id="rOn" style="width:auto"> 有効（見通しと警告に含める）</label></div>
     <div class="row" style="margin-top:14px">
@@ -1219,15 +1223,26 @@ function addDays(iso,n){var d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n)
 function dayDiff(a,b){return Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/864e5)}
 function lastDay(y,m){return new Date(y,m,0).getDate()}
 function mdw(iso){return iso.slice(5).replace('-','/')+'（'+week(iso)+'）'}
+/* 何か月ごとか。旧形式（freq: month/year）の登録もそのまま読めるようにする */
+function everyOf(it){return +it.every||(it.freq==='year'?12:1)}
+/* 支払いのある月。起点の月から every か月ずつ進めた月（例：2か月ごと・起点2月 → 偶数月） */
+function monthsOf(it){
+  var e=everyOf(it), a=+it.month||1, out=[], m;
+  for(m=1;m<=12;m++)if(((m-a)%e+e)%e===0)out.push(m);
+  return out;
+}
 function recurText(it){
-  var d=(+it.day>=31)?'末日':(it.day+'日');
-  return (it.freq==='year'?('毎年'+it.month+'月'):'毎月')+d;
+  var e=everyOf(it), d=(+it.day>=31)?'末日':(it.day+'日');
+  if(e===1)return '毎月'+d;
+  if(e===12)return '毎年'+(+it.month||1)+'月'+d;
+  return e+'か月ごと（'+monthsOf(it).join('・')+'月）'+d;
 }
 /* from〜to に来る予定日。31日（末日）指定は、その月の最終日に丸める */
 function occDates(it,from,to){
   var out=[], f=from.split('-').map(Number), t=to.split('-').map(Number), y=f[0], m=f[1];
+  var ms=monthsOf(it);
   while(y<t[0]||(y===t[0]&&m<=t[1])){
-    if(it.freq!=='year'||+it.month===m){
+    if(ms.indexOf(m)>=0){
       var iso=y+'-'+pad2(m)+'-'+pad2(Math.min(+it.day||1,lastDay(y,m)));
       if(iso>=from&&iso<=to)out.push(iso);
     }
@@ -1356,7 +1371,11 @@ function fillRecurCats(sel){
   el.value=list.some(function(c){return c.n===keep})?keep:list[list.length-1].n;
 }
 function applyRecurFreq(){
-  document.getElementById('rMonthWrap').classList.toggle('hide',document.getElementById('rFreq').value!=='year');
+  var e=+document.getElementById('rFreq').value||1, a=+document.getElementById('rMonth').value||1;
+  document.getElementById('rMonthWrap').classList.toggle('hide',e===1);
+  document.getElementById('rMonthLbl').textContent=(e===12)?'月':'支払月（どれか1つ）';
+  document.getElementById('rMonthsHint').textContent=
+    (e===1||e===12)?'':'対象の月：'+monthsOf({every:e,month:a}).join('・')+'月';
 }
 function openRecur(i){
   var it=(i===null||i===undefined)?null:recurs[i];
@@ -1367,7 +1386,7 @@ function openRecur(i){
   document.getElementById('rName').value=it?it.n:'';
   fillAccSel('rAcct',it?it.acct:defaultAcct('exp'));
   fillRecurCats(it?it.cat:'');
-  document.getElementById('rFreq').value=it?it.freq:'month';
+  document.getElementById('rFreq').value=String(it?everyOf(it):1);
   var ms='',ds='',k;
   for(k=1;k<=12;k++)ms+='<option value="'+k+'">'+k+'月</option>';
   for(k=1;k<=30;k++)ds+='<option value="'+k+'">'+k+'日</option>';
@@ -1396,7 +1415,7 @@ function saveRecur(){
     type:document.getElementById('rType').value,
     n:name, amount:amt, acct:acct,
     cat:document.getElementById('rCat').value,
-    freq:document.getElementById('rFreq').value,
+    every:parseInt(document.getElementById('rFreq').value,10)||1,
     month:parseInt(document.getElementById('rMonth').value,10)||1,
     day:parseInt(document.getElementById('rDay').value,10)||1,
     on:document.getElementById('rOn').checked,
