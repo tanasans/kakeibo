@@ -64,10 +64,21 @@
   .badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;
          background:#fee2e2;color:#b91c1c;font-weight:700;margin-left:6px;vertical-align:1px}
   .mini{padding:4px 9px;font-size:11px;margin-top:5px}
-  .item.fc{cursor:default}
+  .item.fc{cursor:pointer}
   .item.fc .nm{white-space:normal}
   .item.short{background:#fef2f2}
   .item.short .am2 .sub{color:var(--out);font-weight:700}
+  /* 設定画面の折りたたみ。見出しだけ見せ、タップで開く */
+  details.fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;
+       font-size:13px;color:var(--sub);font-weight:700;padding:4px 0;user-select:none}
+  details.fold>summary::-webkit-details-marker{display:none}
+  details.fold>summary::before{content:'';width:7px;height:7px;flex:none;margin:0 3px 0 2px;
+       border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+       transform:rotate(-45deg);transition:transform .15s}
+  details.fold[open]>summary::before{transform:rotate(45deg)}
+  details.fold>summary .t{flex:1}
+  details.fold>summary .cnt{font-weight:400;font-size:12px;white-space:nowrap}
+  details.fold[open]>summary{margin-bottom:10px;color:var(--ink)}
   /* 支出/収入/振替の切り替え */
   .seg{display:flex;gap:6px}
   .seg button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
@@ -294,24 +305,9 @@
 
 <!-- ===== 設定 ===== -->
 <section id="pg-set" class="hide">
-  <div class="panel">
-    <h2>口座（現金・銀行・電子マネー・証券）</h2>
-    <div class="fg" style="max-width:220px">
-      <label>残高の基準日（全口座共通）</label>
-      <input type="date" id="balDate">
-    </div>
-    <div id="accEdit"></div>
-    <div class="row" style="margin-top:8px">
-      <div><button onclick="addAcc()" style="width:100%">口座を追加</button></div>
-      <div><button class="pri" onclick="saveAccs()" style="width:100%">保存</button></div>
-    </div>
-    <div class="note">
-      <b>基準日</b>にその時点の実際の残高を「残高」欄に入力してください。<b>基準日当日以降</b>の入出金だけが加減算され、それより前の明細は残高に影響しません（基準日の残高にすでに含まれているため）。<br>
-      基準日を空欄にすると、全期間の明細を集計します。
-    </div>
-  </div>
-  <div class="panel">
-    <h2>定期的な入出金（残高不足の警告）</h2>
+  <!-- 誤ってさわらないよう、どの項目も開くまでは中身を出さない（タブを開くたびに全部閉じる） -->
+  <details class="panel fold">
+    <summary><span class="t">定期的な入出金（残高不足の警告）</span><span class="cnt" id="cnt-recur"></span></summary>
     <div id="recurList"></div>
     <div class="row" style="margin-top:8px">
       <div><button class="pri" onclick="openRecur(null)" style="width:100%">定期的な入出金を追加</button></div>
@@ -325,32 +321,48 @@
     <div class="note">
       登録した支払い・入金を今日から<b>60日先</b>まで口座ごとに積み上げて残高を予測し、警告ラインを下回る見込みがあれば撮影タブの上部に警告を出します。<br>
       給与など<b>定期的な収入も登録</b>しておくと、入金で持ち直す分まで含めて正しく見通せます。<br>
-      同じ口座・同じ金額の明細が予定日の前後5日以内にあれば、支払い済みとみなします（土日祝で日がずれる年金なども対象）。電気代など毎回金額が変わるものは、集計タブの予定から「記録する」か「処理済みにする」を押してください。
+      同じ口座・同じ金額の明細が予定日の前後5日以内にあれば、支払い済みとみなします（土日祝で日がずれる年金なども対象）。電気代など毎回金額が変わるものは、集計タブの予定の行をタップして金額を直して保存するか、「処理済みにする」を押してください。
     </div>
-  </div>
-  <div class="panel">
-    <h2>支出カテゴリと自動仕分けキーワード</h2>
+  </details>
+  <details class="panel fold">
+    <summary><span class="t">支出カテゴリと自動仕分けキーワード</span><span class="cnt" id="cnt-cat"></span></summary>
     <div id="catEdit"></div>
     <div class="row" style="margin-top:8px">
       <div><button onclick="addCat()" style="width:100%">カテゴリを追加</button></div>
       <div><button class="pri" onclick="saveCats()" style="width:100%">保存</button></div>
     </div>
     <div class="note">キーワードは「,」区切り。レシートの店名や商品名に含まれていると自動でそのカテゴリになります。一覧で手動修正すると、その店名を記憶して次回から優先します。</div>
-  </div>
-  <div class="panel">
-    <h2>収入カテゴリ</h2>
+  </details>
+  <details class="panel fold">
+    <summary><span class="t">収入カテゴリ</span><span class="cnt" id="cnt-icat"></span></summary>
     <div id="icatEdit"></div>
     <div class="row" style="margin-top:8px">
       <div><button onclick="addICat()" style="width:100%">カテゴリを追加</button></div>
       <div><button class="pri" onclick="saveICats()" style="width:100%">保存</button></div>
     </div>
-  </div>
-  <div class="panel">
-    <h2>記憶した店名 → カテゴリ</h2>
+  </details>
+  <details class="panel fold">
+    <summary><span class="t">記憶した店名 → カテゴリ</span><span class="cnt" id="cnt-mem"></span></summary>
     <div id="memList"></div>
-  </div>
-  <div class="panel">
-    <h2>AIで読み取る（高精度）</h2>
+  </details>
+  <details class="panel fold">
+    <summary><span class="t">口座（現金・銀行・電子マネー・証券）</span><span class="cnt" id="cnt-acc"></span></summary>
+    <div class="fg" style="max-width:220px">
+      <label>残高の基準日（全口座共通）</label>
+      <input type="date" id="balDate">
+    </div>
+    <div id="accEdit"></div>
+    <div class="row" style="margin-top:8px">
+      <div><button onclick="addAcc()" style="width:100%">口座を追加</button></div>
+      <div><button class="pri" onclick="saveAccs()" style="width:100%">保存</button></div>
+    </div>
+    <div class="note">
+      <b>基準日</b>にその時点の実際の残高を「残高」欄に入力してください。<b>基準日当日以降</b>の入出金だけが加減算され、それより前の明細は残高に影響しません（基準日の残高にすでに含まれているため）。<br>
+      基準日を空欄にすると、全期間の明細を集計します。
+    </div>
+  </details>
+  <details class="panel fold">
+    <summary><span class="t">AIで読み取る（高精度）</span><span class="cnt" id="cnt-ai"></span></summary>
     <div class="fg"><label>Claude APIキー</label>
       <input type="password" id="aiKey" placeholder="sk-ant-..." autocomplete="off"></div>
     <div class="fg"><label>使用するモデル</label><select id="aiModel"></select></div>
@@ -365,9 +377,9 @@
       空欄にすると、これまでどおり端末内の文字認識（無料・オフライン可）で処理します。
       AIが使えないときは自動で端末内の文字認識に切り替わります。
     </div>
-  </div>
-  <div class="panel">
-    <h2>端末内OCRについて</h2>
+  </details>
+  <details class="panel fold">
+    <summary><span class="t">端末内OCR・データの削除</span></summary>
     <div class="note">
       文字認識には Tesseract.js（日本語）を使用します。初回のみ辞書データのダウンロードで数十秒かかります。
       一度読み込めば、以降はオフラインでも動作します。
@@ -375,7 +387,7 @@
     <div class="row" style="margin-top:8px">
       <div><button class="danger" onclick="clearAll()" style="width:100%">全データを削除</button></div>
     </div>
-  </div>
+  </details>
 </section>
 
 </div>
@@ -396,12 +408,12 @@
 
     <div id="nameBlk">
       <div class="fg"><label id="nameLbl">店名</label>
-        <input type="text" id="fShop" list="shopList" autocomplete="off">
+        <input type="text" id="fShop" list="shopList" autocomplete="off" onchange="shopChanged()">
         <datalist id="shopList"></datalist></div>
       <div class="fg hide" id="shopWrap"><label id="shopLbl">店名の候補（タップで入力）</label>
         <div class="catgrid" id="shopCands"></div></div>
       <div class="fg"><label>カテゴリ</label><div class="catgrid" id="fCats"></div></div>
-      <div class="fg"><label id="acctLbl">支払元</label><select id="fAcct"></select></div>
+      <div class="fg"><label id="acctLbl">支払元</label><select id="fAcct" onchange="if(cur)cur.acctTouched=true"></select></div>
     </div>
 
     <div id="trfBlk" class="hide">
@@ -604,7 +616,7 @@ function tab(id){
   });
   if(id==='list')renderList();
   if(id==='sum')renderSum();
-  if(id==='set')renderSet();
+  if(id==='set'){closeFolds();renderSet();}
   if(id==='cam')renderQuick();
   window.scrollTo(0,0);
 }
@@ -854,7 +866,7 @@ function runAi(cv,thumb){
     openSheet({id:null,type:'exp',
       date:(/^\d{4}-\d{2}-\d{2}$/.test(d.date||'')?d.date:todayIso()),
       amount:amt||'', shop:shop, cat:cat,
-      acct:defaultAcct('exp'), memo:d.memo||'', ocr:'', thumb:thumb||''});
+      acct:acctFor(shop,'exp'), memo:d.memo||'', ocr:'', thumb:thumb||''});
   }).catch(function(e){
     if(e.kind==='billing'){
       setAiWarn('<b>AIでの読み取りが止まりました。</b><br>'+esc(e.message)+
@@ -953,7 +965,7 @@ function finishOcr(text,thumb){
   var known=matchKnownShop(text);
   if(known)p.shop=known;
   openSheet({id:null,type:'exp',date:p.date,amount:p.amount,shop:p.shop,
-             cat:guessCat((known||p.shop)+' '+text),acct:defaultAcct('exp'),
+             cat:guessCat((known||p.shop)+' '+text),acct:acctFor(known||p.shop,'exp'),
              memo:'',ocr:text,thumb:thumb||''});
 }
 
@@ -1132,6 +1144,25 @@ function amountCandidates(text){
 /* 利用者が決めたルール（記憶した店名 → キーワード）だけでカテゴリを決める。
    該当なしは null を返し、呼び出し側でAIの判断などにゆだねる。 */
 function catExists(n){return cats.some(function(c){return c.n===n})}
+/* その店で過去にいちばん多く使った口座（同数なら最近使ったほう）。
+   同じ店とみなす範囲は表記ゆれ・支店名の有無まで。該当がなければ既定の口座 */
+function acctFor(shop,type){
+  type=type||'exp';
+  var n=normShop(shop||''); if(n.length<2)return defaultAcct(type);
+  var cnt={},last={};
+  recs.forEach(function(r){
+    if(typeOf(r)!==type||!r.acct||!r.shop||!accOf(r.acct))return;
+    var m=normShop(r.shop); if(m.length<2)return;
+    if(!(m===n||m.indexOf(n)>=0||n.indexOf(m)>=0||dice(m,n)>=0.5))return;
+    cnt[r.acct]=(cnt[r.acct]||0)+1;
+    if(!last[r.acct]||r.date>last[r.acct])last[r.acct]=r.date;
+  });
+  var best=null;
+  Object.keys(cnt).forEach(function(a){
+    if(!best||cnt[a]>cnt[best]||(cnt[a]===cnt[best]&&last[a]>last[best]))best=a;
+  });
+  return best||defaultAcct(type);
+}
 function ruleCat(shop){
   if(!shop)return null;
   var t=z2h(shop).toLowerCase(), k, kk;
@@ -1305,16 +1336,15 @@ function renderForecast(){
   lastFc=fc;
   if(!fc.events.length){el.innerHTML='<div class="empty">今後'+FC_DAYS+'日の予定はありません。</div>';return}
   var html='<div class="note" style="margin:0 0 6px">警告ライン '+signed(+warnLine||0)+
-    ' を下回る見込みの行は赤で表示します。</div>';
+    ' を下回る見込みの行は赤で表示します。行をタップすると、その内容で明細を追加できます。</div>';
   fc.events.forEach(function(e,i){
     var it=e.it, inc=(it.type==='inc'), c=inc?icatOf(it.cat):catOf(it.cat);
-    html+='<div class="item fc'+(e.below?' short':'')+'">'+
+    html+='<div class="item fc'+(e.below?' short':'')+'" onclick="recordOcc('+i+')" title="タップでこの内容の明細を追加">'+
       '<span class="tag" style="background:'+c.c+'">'+esc(it.cat||'-')+'</span>'+
       '<span class="nm">'+mdw(e.date)+' '+esc(it.n)+
         (e.overdue?'<span class="badge">未処理</span>':'')+
         ' <span class="sub">'+esc(accName(it.acct))+'</span>'+
-        (e.date<=today?'<br><button class="mini" onclick="recordOcc('+i+')">記録する</button> '+
-                       '<button class="mini" onclick="skipOcc('+i+')">処理済みにする</button>':'')+
+        (e.date<=today?'<br><button class="mini" onclick="event.stopPropagation();skipOcc('+i+')">処理済みにする</button>':'')+
       '</span>'+
       '<span class="am am2"><span class="'+(inc?'plus':'')+'">'+(inc?'+':'-')+yen(+it.amount)+'</span>'+
         '<span class="sub">残高 '+signed(e.after)+'</span></span></div>';
@@ -1520,7 +1550,7 @@ function addImgFile(ev){
   fr.readAsDataURL(f);
 }
 function openSheet(r){
-  cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp',thumb:'',recur:r.recur||''};
+  cur={id:r.id,ocr:r.ocr||'',cat:r.cat,type:r.type||'exp',thumb:'',recur:r.recur||'',acctTouched:false};
   document.getElementById('shTitle').textContent=r.id?'明細を編集':(r.ocr?'明細の確認':'手入力で追加');
   document.getElementById('fDate').value=r.date||todayIso();
   document.getElementById('fAmt').value=r.amount||'';
@@ -1619,6 +1649,14 @@ function pickShop(i){
   var s=curShops[i];
   document.getElementById('fShop').value=s;
   if(cur&&cur.type==='exp'&&mem[s])drawCatPicker(mem[s]);
+  shopChanged();
+}
+/* 店名が決まったら、その店でいつも使う口座を入れる。
+   自分で口座を選び直した後や、保存済みの明細を直しているときは変えない */
+function shopChanged(){
+  if(!cur||cur.id||cur.type==='trf'||cur.acctTouched)return;
+  var s=document.getElementById('fShop').value.trim(); if(!s)return;
+  document.getElementById('fAcct').value=acctFor(s,cur.type);
 }
 function closeSheet(){document.getElementById('mask').classList.add('hide');cur=null}
 
@@ -2005,7 +2043,18 @@ function testAi(){
     el.textContent='接続できませんでした（通信エラー）。オフラインでないか確認してください。';
   });
 }
+function closeFolds(){
+  [].forEach.call(document.querySelectorAll('#pg-set details.fold'),function(d){d.open=false});
+}
+function setCnt(id,t){var el=document.getElementById(id);if(el)el.textContent=t}
 function renderSet(){
+  /* 閉じていても中身の量が分かるよう、見出しに件数を出す */
+  setCnt('cnt-recur',recurs.length+'件');
+  setCnt('cnt-cat',cats.length+'件');
+  setCnt('cnt-icat',icats.length+'件');
+  setCnt('cnt-mem',Object.keys(mem).length+'件');
+  setCnt('cnt-acc',accs.length+'件');
+  setCnt('cnt-ai',aiKey?'設定済み':'未設定');
   renderRecurList();
   document.getElementById('aiKey').value=aiKey||'';
   document.getElementById('aiModel').innerHTML=AI_MODELS.map(function(m){
