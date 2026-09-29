@@ -427,7 +427,13 @@ $('btnStop').onclick=function(){if(ctl)ctl.abort()};
 /* ---------- APIキーで直接読む（claude.ai の外で開いたとき。家計簿アプリと同じ方式） ---------- */
 var K_KEY='seikyu_aikey', K_KAKEIBO='kakeibo_aikey';
 var API_MODEL={default:'claude-sonnet-5',complex:'claude-opus-5-5'};
-function getKey(){ try{ return localStorage.getItem(K_KEY)||localStorage.getItem(K_KAKEIBO)||''; }catch(e){ return ''; } }
+/* 家計簿は JSON.stringify して保存しているので "sk-ant-…" と引用符付きで入っている。外して使う */
+function cleanKey(v){
+  v=(v||'').trim();
+  if(v.charAt(0)==='"'){ try{ v=JSON.parse(v); }catch(e){ v=v.replace(/^"+|"+$/g,''); } }
+  return String(v||'').replace(/\s+/g,'');
+}
+function getKey(){ try{ return cleanKey(localStorage.getItem(K_KEY))||cleanKey(localStorage.getItem(K_KAKEIBO)); }catch(e){ return ''; } }
 /* API側でも長辺1568pxに縮められるので、送る前にそこまで縮めて通信量を減らす */
 async function toB64(blob){
   var url=URL.createObjectURL(blob);
@@ -464,7 +470,7 @@ async function callApi(prompt,blobs,tier,signal){
   try{ return JSON.parse(t.slice(a,b+1)); }catch(e){ throw {code:'invalid_json'}; }
 }
 $('f_key').onchange=function(){
-  var v=this.value.trim(); try{ if(v)localStorage.setItem(K_KEY,v); else localStorage.removeItem(K_KEY); }catch(e){}
+  var v=cleanKey(this.value); try{ if(v)localStorage.setItem(K_KEY,v); else localStorage.removeItem(K_KEY); }catch(e){}
   this.value=''; this.placeholder=v?'保存済み（入れ直すときだけ入力）':'sk-ant-…';
   setAi(getKey()?'api':'nokey');
 };
