@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"></head><body>
+<title>請求書読取テスト</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Kaku+Gothic+New:wght@500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 伝票の青焼き・朱の検印をヒントにした配色。上に撮影、下に確認・一覧のタブ */
+:root{
+  --bg:#f4f5f2; --paper:#ffffff; --ink:#1d2327; --muted:#5f6a70; --line:#d5dad6;
+  --accent:#1f5f8b; --accent-weak:#e3edf4; --ok:#2f7a4a; --ok-weak:#e3f1e8;
+  --ng:#b3362b; --ng-weak:#f7e4e1; --warn:#9a6a00; --warn-weak:#f6eed8;
+  --f-disp:"Zen Kaku Gothic New","BIZ UDPGothic","Hiragino Sans","Yu Gothic",sans-serif;
+  --f-body:"BIZ UDPGothic","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  --f-num:"IBM Plex Mono","BIZ UDPGothic",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15191b; --paper:#1d2225; --ink:#e6eaeb; --muted:#9aa5aa; --line:#343c40;
+  --accent:#7db4dc; --accent-weak:#1f3242; --ok:#6cc48b; --ok-weak:#1c3326;
+  --ng:#ef8a7e; --ng-weak:#3d2320; --warn:#e0b44f; --warn-weak:#3a3019; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15191b; --paper:#1d2225; --ink:#e6eaeb; --muted:#9aa5aa; --line:#343c40;
+  --accent:#7db4dc; --accent-weak:#1f3242; --ok:#6cc48b; --ok-weak:#1c3326;
+  --ng:#ef8a7e; --ng-weak:#3d2320; --warn:#e0b44f; --warn-weak:#3a3019; color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;padding-inline:16px;padding-block:0 48px}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:18px 4px;border-bottom:2px solid var(--ink)}
+h1{font-family:var(--f-disp);font-size:22px;margin:0;letter-spacing:.04em;text-wrap:balance}
+.sub{color:var(--muted);font-size:12.5px;margin:0}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:7px 14px;border-radius:6px;font:inherit;font-size:14px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+h2{font-family:var(--f-disp);font-size:16px;margin:0;letter-spacing:.03em}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:inherit;cursor:pointer}
+.btn{border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:9px 16px;border-radius:6px;font-size:14px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:700}
+.btn.danger{color:var(--ng);border-color:var(--ng)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:focus-visible,.tab:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.pick{display:inline-flex;align-items:center;gap:8px;border:2px dashed var(--accent);color:var(--accent);background:var(--accent-weak);border-radius:8px;padding:12px 18px;font-weight:700;cursor:pointer}
+.pick input{display:none}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.thumb{position:relative;width:96px;height:128px;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--bg)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb .no{position:absolute;left:4px;top:4px;background:var(--ink);color:var(--paper);font-size:11px;padding:0 5px;border-radius:3px}
+.thumb .x{position:absolute;right:3px;top:3px;border:none;background:var(--paper);color:var(--ng);width:22px;height:22px;border-radius:50%;line-height:1;font-weight:700}
+label.opt{display:flex;gap:6px;align-items:center;font-size:13.5px}
+select,input,textarea{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:6px 8px;min-width:0}
+.status{padding:10px 12px;border-radius:6px;background:var(--accent-weak);font-size:13.5px}
+.status.err{background:var(--ng-weak);color:var(--ng)}
+
+/* 確認画面：左に写真、右に項目 */
+.confirm{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:16px}
+@media (max-width:760px){.confirm{grid-template-columns:minmax(0,1fr)}}
+.viewer{display:flex;flex-direction:column;gap:8px;min-width:0}
+.viewer .imgbox{border:1px solid var(--line);border-radius:6px;overflow:auto;max-height:70vh;background:var(--bg)}
+.viewer img{display:block;width:100%;max-width:none}
+.viewer.zoom img{width:220%}
+.fields{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 10px;align-items:center}
+.fields label{font-size:13px;color:var(--muted);white-space:nowrap}
+.fields input{width:100%}
+.fields input.num,td input.num{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.fields input.changed,td input.changed{background:var(--warn-weak);border-color:var(--warn)}
+.fields input.unsure{border-color:var(--ng);box-shadow:inset 3px 0 0 var(--ng)}
+.sect{font-family:var(--f-disp);font-size:13px;letter-spacing:.08em;color:var(--accent);grid-column:1/-1;margin-top:6px;border-bottom:1px solid var(--line)}
+.checks{display:flex;flex-direction:column;gap:4px}
+.chk{font-size:13px;padding:5px 10px;border-radius:5px;display:flex;gap:8px}
+.chk.ok{background:var(--ok-weak);color:var(--ok)}
+.chk.ng{background:var(--ng-weak);color:var(--ng)}
+.chk.na{background:var(--bg);color:var(--muted)}
+.chk b{min-width:1.2em}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:middle}
+th{font-weight:700;color:var(--muted);font-size:12px;white-space:nowrap;background:var(--bg)}
+td.n,th.n{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+td input{width:100%;padding:4px 6px}
+.items td input{min-width:60px}
+.items td.nm input{min-width:150px}
+.pill{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;white-space:nowrap}
+.pill.ok{background:var(--ok-weak);color:var(--ok)} .pill.ng{background:var(--ng-weak);color:var(--ng)} .pill.warn{background:var(--warn-weak);color:var(--warn)}
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.stat{border:1px solid var(--line);border-radius:6px;padding:10px 14px;min-width:130px;flex:1}
+.stat .v{font-family:var(--f-num);font-size:22px;font-variant-numeric:tabular-nums}
+.stat .k{font-size:12px;color:var(--muted)}
+.bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;background:var(--ng)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal{background:var(--paper);border-radius:8px;padding:18px;max-width:440px;width:100%;display:flex;flex-direction:column;gap:12px}
+.empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:6px}
+.clickrow{cursor:pointer} .clickrow:hover td{background:var(--accent-weak)}
+@media (prefers-reduced-motion:no-preference){.btn,.tab{transition:background .15s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>請求書読取テスト</h1>
+      <p class="sub">業者の請求書を撮影 → AIが読み取り → 人が確認して確定。直した項目の数で読み取り精度を測ります。</p>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" id="t-read" aria-selected="true" data-tab="read">撮影・読取</button>
+      <button class="tab" role="tab" id="t-list" aria-selected="false" data-tab="list">一覧・集計</button>
+      <button class="tab" role="tab" id="t-acc" aria-selected="false" data-tab="acc">精度</button>
+    </nav>
+  </header>
+
+  <!-- 撮影・読取 -->
+  <section id="p-read" class="panel">
+    <h2>1. 請求書を撮る</h2>
+    <p class="small muted" style="margin:0">1枚の請求書が複数ページのときは、続けて追加してください（最大<span id="maxImg">4</span>枚）。紙全体が写るように、真上から明るい場所で撮ると精度が上がります。</p>
+    <div class="row">
+      <label class="pick">📷 撮影・写真を選ぶ<input type="file" id="fileIn" accept="image/jpeg,image/png,image/webp" multiple></label>
+      <label class="opt"><input type="checkbox" id="optSplit" checked>細かい字対策（上下に分けて拡大も送る）</label>
+      <label class="opt">読取モデル
+        <select id="optTier"><option value="default">標準</option><option value="complex">高精度（遅い）</option></select>
+      </label>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+    <div class="row">
+      <button class="btn primary" id="btnRead" disabled>AIで読み取る</button>
+      <button class="btn" id="btnStop" hidden>中止</button>
+      <button class="btn" id="btnClear" hidden>写真をやり直す</button>
+      <span id="aiState" class="pill warn">AI：準備中…</span>
+    </div>
+    <div class="row" id="keyRow" hidden>
+      <label class="opt" for="f_key">Claude APIキー</label>
+      <input id="f_key" type="password" autocomplete="off" placeholder="sk-ant-…" style="flex:1;min-width:160px">
+      <span class="small muted" style="flex-basis:100%">家計簿アプリと同じキーが使えます（同じ場所に置けば自動で読み込みます）。キーはこの端末にだけ保存されます。</span>
+    </div>
+    <div id="status" class="status" hidden></div>
+
+    <div id="confirmBox" hidden>
+      <h2 style="margin-bottom:10px">2. 読み取り結果を確認して確定</h2>
+      <div class="confirm">
+        <div class="viewer" id="viewer">
+          <div class="row small">
+            <span class="muted">写真</span>
+            <select id="pageSel"></select>
+            <button class="btn" id="btnZoom" style="padding:4px 10px">拡大</button>
+          </div>
+          <div class="imgbox"><img id="bigImg" alt="読み取った請求書"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <div class="checks" id="checks"></div>
+          <form id="fForm" class="fields" autocomplete="off"></form>
+        </div>
+      </div>
+      <h2 style="margin:16px 0 8px">明細</h2>
+      <div class="scroll"><table class="items"><thead><tr>
+        <th>品名・摘要</th><th class="n">数量</th><th>単位</th><th class="n">単価</th><th class="n">金額</th><th>税率</th><th></th>
+      </tr></thead><tbody id="itemsBody"></tbody></table></div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="btnAddItem" type="button">＋ 行を追加</button></div>
+      <div class="fields" style="margin-top:14px">
+        <label for="f_memo">確認メモ</label>
+        <textarea id="f_memo" rows="2" placeholder="例：手書き部分が読めなかった、2枚目の明細を落とした など"></textarea>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary" id="btnSave" type="button">確定して保存</button>
+        <button class="btn" id="btnDiscard" type="button">保存せず閉じる</button>
+        <span class="small muted" id="diffNote"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 一覧・集計 -->
+  <section id="p-list" class="panel" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2>保存した請求書</h2>
+      <div class="row">
+        <select id="grpSel"><option value="vendor">業者別</option><option value="site">現場別</option><option value="month">請求月別</option></select>
+        <button class="btn" id="btnCsv">CSVで保存</button>
+      </div>
+    </div>
+    <div id="sumBox"></div>
+    <div class="scroll"><table><thead><tr>
+      <th>請求日</th><th>業者</th><th>現場・工事</th><th class="n">税抜</th><th class="n">消費税</th><th class="n">合計</th><th>検算</th><th class="n">直した数</th><th></th>
+    </tr></thead><tbody id="listBody"></tbody></table></div>
+  </section>
+
+  <!-- 精度 -->
+  <section id="p-acc" class="panel" hidden>
+    <h2>読み取り精度</h2>
+    <p class="small muted" style="margin:0">確定時に人が直した項目を「誤り」として数えます。空欄のまま確定した項目（請求書に無い項目）は数えません。</p>
+    <div class="stats" id="accStats"></div>
+    <div class="scroll"><table><thead><tr><th>項目</th><th class="n">読んだ数</th><th class="n">直した数</th><th class="n">正解率</th><th style="width:30%">誤りの割合</th></tr></thead><tbody id="accBody"></tbody></table></div>
+  </section>
+</div>
+
+<div id="modal" class="modal-bg" hidden><div class="modal" role="dialog" aria-modal="true">
+  <h2 id="mTitle"></h2><div id="mBody" class="small"></div>
+  <div class="row" style="justify-content:flex-end"><button class="btn" id="mNo">やめる</button><button class="btn danger" id="mYes">削除する</button></div>
+</div></div>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+
+/* ---------- 項目の定義 ---------- */
+var FIELDS=[
+  {sect:'請求元'},
+  {k:'vendor',l:'業者名'},
+  {k:'regNo',l:'登録番号',ph:'T＋13桁'},
+  {k:'vendorTel',l:'業者の電話'},
+  {sect:'請求の内容'},
+  {k:'date',l:'請求日',ph:'YYYY-MM-DD'},
+  {k:'invNo',l:'請求書番号'},
+  {k:'to',l:'宛先'},
+  {k:'site',l:'現場・工事名'},
+  {k:'closing',l:'締め日・対象期間'},
+  {k:'due',l:'支払期日',ph:'YYYY-MM-DD'},
+  {sect:'金額（円）'},
+  {k:'sub10',l:'税抜 10%対象',num:1},
+  {k:'tax10',l:'消費税 10%',num:1},
+  {k:'sub8',l:'税抜 8%対象',num:1},
+  {k:'tax8',l:'消費税 8%',num:1},
+  {k:'nontax',l:'非課税・対象外',num:1},
+  {k:'prevBalance',l:'前回請求額',num:1},
+  {k:'paid',l:'入金額',num:1},
+  {k:'carry',l:'繰越額',num:1},
+  {k:'total',l:'今回請求額（合計）',num:1},
+  {sect:'振込先'},
+  {k:'bank',l:'銀行・支店'},
+  {k:'acctType',l:'口座種別'},
+  {k:'acctNo',l:'口座番号'},
+  {k:'acctName',l:'口座名義'}
+];
+var FKEYS=FIELDS.filter(function(f){return f.k}).map(function(f){return f.k});
+var FLABEL={}; FIELDS.forEach(function(f){if(f.k)FLABEL[f.k]=f.l});
+FLABEL.items='明細';
+
+/* ---------- 状態 ---------- */
+var imgs=[];          // {file, url}
+var cur=null;         // 読み取り結果 {ai, t0, tier}
+var ctl=null;
+var saved=[];         // db の請求書
+var sample=null, db=null, dl=null;
+var LS_KEY='seikyu-test-v1';
+
+function lsGet(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'[]')}catch(e){return[]}}
+function lsSet(a){try{localStorage.setItem(LS_KEY,JSON.stringify(a))}catch(e){}}
+
+/* ---------- タブ ---------- */
+document.querySelectorAll('.tab').forEach(function(b){
+  b.onclick=function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.setAttribute('aria-selected',x===b?'true':'false')});
+    ['read','list','acc'].forEach(function(t){$('p-'+t).hidden=(t!==b.dataset.tab)});
+    if(b.dataset.tab==='list')renderList();
+    if(b.dataset.tab==='acc')renderAcc();
+  };
+});
+
+/* ---------- 写真 ---------- */
+var MAXIMG=4;
+$('fileIn').onchange=function(e){
+  var fs=[].slice.call(e.target.files||[]);
+  fs.forEach(function(f){ if(imgs.length<MAXIMG) imgs.push({file:f,url:URL.createObjectURL(f)}) });
+  e.target.value='';
+  renderThumbs();
+};
+function renderThumbs(){
+  var h='';
+  imgs.forEach(function(m,i){
+    h+='<div class="thumb"><img src="'+m.url+'" alt="'+(i+1)+'枚目"><span class="no">'+(i+1)+'</span><button class="x" data-i="'+i+'" aria-label="'+(i+1)+'枚目を外す">×</button></div>';
+  });
+  $('thumbs').innerHTML=h;
+  $('thumbs').querySelectorAll('.x').forEach(function(b){
+    b.onclick=function(){var i=+b.dataset.i; URL.revokeObjectURL(imgs[i].url); imgs.splice(i,1); renderThumbs();};
+  });
+  $('btnRead').disabled=!imgs.length;
+  $('btnClear').hidden=!imgs.length;
+}
+$('btnClear').onclick=function(){
+  imgs.forEach(function(m){URL.revokeObjectURL(m.url)}); imgs=[]; renderThumbs();
+  $('confirmBox').hidden=true; setStatus('');
+};
+
+function loadImg(url){return new Promise(function(ok,ng){var im=new Image();im.onload=function(){ok(im)};im.onerror=ng;im.src=url;});}
+function toBlob(cv){return new Promise(function(ok){cv.toBlob(ok,'image/jpeg',0.9)});}
+/* 上下を少し重ねて2分割。AIに送るときは1枚ずつ縮小されるので、分けると字が大きく写る */
+async function halves(url){
+  var im=await loadImg(url), w=im.naturalWidth, h=im.naturalHeight, out=[];
+  var portrait=h>=w, ov=0.08;
+  for(var k=0;k<2;k++){
+    var cv=document.createElement('canvas'), sx=0, sy=0, sw=w, sh=h;
+    if(portrait){ sh=Math.round(h*(0.5+ov)); sy=k?h-sh:0; }
+    else{ sw=Math.round(w*(0.5+ov)); sx=k?w-sw:0; }
+    var sc=Math.min(1,2600/Math.max(sw,sh));
+    cv.width=Math.round(sw*sc); cv.height=Math.round(sh*sc);
+    cv.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,cv.width,cv.height);
+    out.push(await toBlob(cv));
+  }
+  return {parts:out, portrait:portrait};
+}
+
+/* ---------- 読み取りの指示 ---------- */
+function buildPrompt(desc){
+  var y=new Date().getFullYear();
+  return [
+'あなたは建設会社の経理担当です。添付画像は、協力業者（下請・資材業者）から当社に届いた日本の請求書です。様式は業者ごとにばらばらです。',
+desc,
+'',
+'次のJSONオブジェクトだけを返してください（説明文やコードブロックは不要）。',
+'{',
+' "vendor": 請求元の会社名・屋号（当社ではなく、請求書を出した側。社印や右上の社名欄を見る）,',
+' "regNo": 適格請求書発行事業者の登録番号（T＋13桁。ハイフンや空白は除く）,',
+' "vendorTel": 請求元の電話番号,',
+' "date": 請求日 YYYY-MM-DD（和暦は西暦に直す。令和8年＝2026年。年が無ければ'+y+'年）,',
+' "invNo": 請求書番号・伝票番号,',
+' "to": 宛先（御中・様の前の名前）,',
+' "site": 現場名・工事名・物件名（複数あれば「、」でつなぐ）,',
+' "closing": 締め日や対象期間（例「8月末締」「2026/8/1〜8/31」）,',
+' "due": 支払期日 YYYY-MM-DD,',
+' "sub10": 10%対象の税抜金額, "tax10": 10%の消費税額,',
+' "sub8": 8%対象の税抜金額, "tax8": 8%の消費税額,',
+' "nontax": 非課税・不課税・立替金など消費税の対象外の金額,',
+' "prevBalance": 前回請求額, "paid": 入金額（御入金額）, "carry": 繰越額,',
+' "total": 今回ご請求額（今回支払ってほしい合計。前回繰越がある様式では繰越を含めた最終的な請求額）,',
+' "bank": 振込先の銀行名と支店名, "acctType": 普通/当座 など, "acctNo": 口座番号, "acctName": 口座名義,',
+' "items": [ { "name": 品名・摘要, "qty": 数量, "unit": 単位, "price": 単価, "amount": 金額, "rate": 10 か 8 か 0（非課税）} ],',
+' "unsure": [ 読み取りに自信がない項目のキー名 ],',
+' "note": 読めなかった箇所や気になる点を一言（無ければ空文字）',
+'}',
+'',
+'ルール：',
+'・金額はカンマや円記号を除いた整数。マイナス（値引き・相殺）は負の数。',
+'・書かれていない項目は null。推測で埋めない。計算で求めた値も入れない（書かれている数字だけを読む）。',
+'・税率の区分が書かれていない請求書で消費税が10%なら、税抜金額を sub10、消費税を tax10 に入れる。',
+'・明細は書かれている行をすべて、上から順に。小計・消費税・合計の行は明細に入れない。明細が多すぎて読めない場合は読めた行だけにし、note に書く。',
+'・手書きの数字は特に注意して読み、あいまいなら unsure に入れる。',
+'・当社（宛先）の住所・電話・口座を請求元のものと取り違えないこと。'
+  ].join('\n');
+}
+
+/* AIが使えるかどうか。ボタンは止めずに、押したときに理由を出す */
+var aiState='wait', aiDetail='';
+var AIMSG={
+  wait:'AIの準備中です。数秒待ってからもう一度押してください。',
+  ok:'AI：使えます',
+  noclaude:'この画面はAIを使えない場所で開かれています。Claudeアプリか、ブラウザで claude.ai にログインして開き直してください。',
+  none:'この画面からAIを呼び出せませんでした。Claudeアプリを最新版にするか、スマホのブラウザ（Chrome・Safari）で claude.ai にログインして開き直してください。パソコンで開き、スマホで撮った写真を選んで読み取ることもできます。',
+  noimg:'claude.ai の画面からは写真をAIに送れません。家計簿アプリと同じ場所（GitHub）に置いた版を使ってください。',
+  nokey:'Claude APIキーを入れてください（家計簿アプリと同じキーで使えます）。'
+};
+function setAi(s){
+  aiState=s; var el=$('aiState');
+  el.textContent=s==='ok'?'AI：使えます':s==='api'?'AI：APIキーで読み取ります':s==='wait'?'AI：準備中…':s==='nokey'?'AI：APIキーが必要です':'AI：使えません（ボタンを押すと理由が出ます）';
+  el.className='pill '+(s==='ok'||s==='api'?'ok':s==='wait'||s==='nokey'?'warn':'ng');
+  $('keyRow').hidden=!(s==='api'||s==='nokey');
+  if(s==='api'||s==='nokey'){ $('f_key').placeholder=getKey()?'保存済み（入れ直すときだけ入力）':'sk-ant-…'; }
+}
+function setStatus(msg,err){var s=$('status'); s.hidden=!msg; s.textContent=msg||''; s.className='status'+(err?' err':'');}
+var ERRMSG={
+  not_granted:'AIの利用が許可されていません。ページを開き直して、確認画面で「許可」を選んでください。',
+  sampling_disabled:'このアカウントではAIを使えません。',
+  images_unavailable:'この画面からは写真を送れません（アプリやブラウザを変えて試してください）。',
+  image_rejected:'写真を読み込めませんでした。JPEGかPNGで撮り直してください。',
+  rate_limited:'利用が集中しています。少し時間をおいてから、もう一度押してください。',
+  session_expired:'claude.ai へのログインが切れています。ログインし直してください。',
+  refused:'この写真は読み取れませんでした。',
+  invalid_json:'読み取り結果の形がくずれていました。もう一度押してください。',
+  empty_completion:'読み取り結果が空でした。写真を撮り直してください。'
+};
+
+$('btnRead').onclick=async function(){
+  if(!imgs.length)return;
+  if(aiState!=='ok'&&aiState!=='api'){ setStatus(AIMSG[aiState]+(aiDetail?'（'+aiDetail+'）':''),true); if(aiState==='nokey')$('f_key').focus(); return; }
+  var tier=$('optTier').value, split=$('optSplit').checked;
+  var lim=null; if(aiState==='ok'){try{lim=await sample.limits()}catch(e){}}
+  var maxN=aiState==='api'?12:((lim&&lim.images&&lim.images.maxCount)||imgs.length);
+  var blobs=[], desc=[];
+  try{
+    setStatus('写真を準備しています…');
+    imgs.forEach(function(m,i){blobs.push(m.file); desc.push('画像'+blobs.length+'：請求書の'+(i+1)+'ページ目の全体');});
+    if(split&&blobs.length+imgs.length*2<=maxN){
+      for(var i=0;i<imgs.length;i++){
+        var hv=await halves(imgs[i].url);
+        hv.parts.forEach(function(b,k){
+          blobs.push(b);
+          desc.push('画像'+blobs.length+'：'+(i+1)+'ページ目の'+(hv.portrait?(k?'下半分':'上半分'):(k?'右半分':'左半分'))+'を拡大したもの（細かい字はこちらで読む）');
+        });
+      }
+    }
+  }catch(e){setStatus('写真の準備に失敗しました：'+e.message,true);return;}
+  blobs=blobs.slice(0,maxN); desc=desc.slice(0,maxN);
+
+  ctl=new AbortController();
+  $('btnRead').disabled=true; $('btnStop').hidden=false;
+  var t0=Date.now(), tick=setInterval(function(){setStatus('読み取り中… '+Math.round((Date.now()-t0)/1000)+'秒（写真'+blobs.length+'枚。30〜90秒ほどかかります）')},1000);
+  setStatus('読み取り中…');
+  try{
+    var opts={images:blobs,modelTier:tier,signal:ctl.signal,cache:false}, r;
+    if(aiState==='api'){ r=await callApi(buildPrompt(desc.join('\n')),blobs,tier,ctl.signal); }
+    else try{
+      if(typeof sample.json!=='function')throw {code:'capability_removed'};
+      r=await sample.json(buildPrompt(desc.join('\n')),opts);
+    }catch(e1){
+      if(!e1||e1.code!=='capability_removed')throw e1;
+      /* 古いアプリでは json が無いので、文章で受け取って自分で取り出す */
+      opts.signal=ctl.signal;
+      var t=(await sample(buildPrompt(desc.join('\n')),opts)).text;
+      var a=t.indexOf('{'), b=t.lastIndexOf('}');
+      try{ r=JSON.parse(t.slice(a,b+1)); }catch(e2){ throw {code:'invalid_json'}; }
+    }
+    clearInterval(tick);
+    if(!r||typeof r!=='object'||Array.isArray(r))throw {code:'invalid_json'};
+    cur={ai:normAi(r),sec:Math.round((Date.now()-t0)/1000),tier:tier,pages:imgs.length,sent:blobs.length};
+    setStatus('読み取りました（'+cur.sec+'秒）。写真と見比べて、違う所を直してから「確定して保存」を押してください。');
+    showConfirm();
+  }catch(e){
+    clearInterval(tick);
+    if(e&&e.code==='cancelled')setStatus('中止しました。');
+    else if(e&&(e.code==='api'||e.code==='net'))setStatus(e.message,true);
+    else setStatus(ERRMSG[e&&e.code]||('読み取りに失敗しました。もう一度押してください。'+(e&&e.message?'（'+e.message+'）':'')),true);
+  }finally{
+    $('btnRead').disabled=!imgs.length; $('btnStop').hidden=true;
+  }
+};
+$('btnStop').onclick=function(){if(ctl)ctl.abort()};
+
+/* ---------- APIキーで直接読む（claude.ai の外で開いたとき。家計簿アプリと同じ方式） ---------- */
+var K_KEY='seikyu_aikey', K_KAKEIBO='kakeibo_aikey';
+var API_MODEL={default:'claude-sonnet-5',complex:'claude-opus-5-5'};
+function getKey(){ try{ return localStorage.getItem(K_KEY)||localStorage.getItem(K_KAKEIBO)||''; }catch(e){ return ''; } }
+/* API側でも長辺1568pxに縮められるので、送る前にそこまで縮めて通信量を減らす */
+async function toB64(blob){
+  var url=URL.createObjectURL(blob);
+  try{
+    var im=await loadImg(url), sc=Math.min(1,1568/Math.max(im.naturalWidth,im.naturalHeight));
+    var cv=document.createElement('canvas');
+    cv.width=Math.round(im.naturalWidth*sc); cv.height=Math.round(im.naturalHeight*sc);
+    cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);
+    var d=cv.toDataURL('image/jpeg',0.85); return d.slice(d.indexOf(',')+1);
+  }finally{ URL.revokeObjectURL(url); }
+}
+async function callApi(prompt,blobs,tier,signal){
+  var content=[];
+  for(var i=0;i<blobs.length;i++) content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:await toB64(blobs[i])}});
+  content.push({type:'text',text:prompt});
+  var res;
+  try{
+    res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST', signal:signal,
+      headers:{'content-type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:API_MODEL[tier]||API_MODEL.default,max_tokens:8000,messages:[{role:'user',content:content}]})
+    });
+  }catch(e){ if(e&&e.name==='AbortError')throw {code:'cancelled'}; throw {code:'net',message:'通信できませんでした。電波の良い所でもう一度押してください。'}; }
+  var j=null; try{ j=await res.json(); }catch(e){}
+  if(!res.ok){
+    var raw=(j&&j.error&&j.error.message)||('HTTP '+res.status);
+    if(/credit|balance|billing|insufficient|quota|purchase/i.test(raw)) throw {code:'api',message:'APIのクレジット残高が不足しています。console.anthropic.com の Billing で追加してください。'};
+    if(res.status===401||res.status===403) throw {code:'api',message:'APIキーが正しくありません。キーを入れ直してください。'};
+    if(res.status===429||res.status===529) throw {code:'rate_limited'};
+    throw {code:'api',message:'読み取りに失敗しました（'+raw+'）'};
+  }
+  var t=((j&&j.content)||[]).filter(function(c){return c.type==='text'}).map(function(c){return c.text}).join('');
+  var a=t.indexOf('{'), b=t.lastIndexOf('}');
+  try{ return JSON.parse(t.slice(a,b+1)); }catch(e){ throw {code:'invalid_json'}; }
+}
+$('f_key').onchange=function(){
+  var v=this.value.trim(); try{ if(v)localStorage.setItem(K_KEY,v); else localStorage.removeItem(K_KEY); }catch(e){}
+  this.value=''; this.placeholder=v?'保存済み（入れ直すときだけ入力）':'sk-ant-…';
+  setAi(getKey()?'api':'nokey');
+};
+
+/* ---------- 値の正規化 ---------- */
+function toNum(v){
+  if(v===null||v===undefined||v==='')return null;
+  if(typeof v==='number')return isFinite(v)?Math.round(v):null;
+  var s=String(v).normalize('NFKC').replace(/[,，円¥\\\s]/g,'').replace(/^△|^▲/,'-');
+  if(!/^-?\d+(\.\d+)?$/.test(s))return null;
+  return Math.round(parseFloat(s));
+}
+function toStr(v){return v===null||v===undefined?'':String(v).trim()}
+function normAi(r){
+  var o={};
+  FIELDS.forEach(function(f){ if(!f.k)return; o[f.k]=f.num?toNum(r[f.k]):toStr(r[f.k]); });
+  o.regNo=o.regNo.normalize('NFKC').replace(/[\s\-‐ー－]/g,'').toUpperCase();
+  o.items=(Array.isArray(r.items)?r.items:[]).map(function(it){
+    it=it||{};
+    return {name:toStr(it.name),qty:toStr(it.qty),unit:toStr(it.unit),price:toNum(it.price),amount:toNum(it.amount),rate:it.rate===null||it.rate===undefined?'':String(toNum(it.rate))};
+  });
+  o.unsure=(Array.isArray(r.unsure)?r.unsure:[]).map(String);
+  o.note=toStr(r.note);
+  return o;
+}
+function fmt(n){return n===null||n===undefined||n===''?'':Number(n).toLocaleString('ja-JP')}
+
+/* ---------- 確認画面 ---------- */
+function showConfirm(){
+  var ai=cur.ai, h='';
+  FIELDS.forEach(function(f){
+    if(f.sect){h+='<div class="sect">'+f.sect+'</div>';return;}
+    var v=f.num?fmt(ai[f.k]):ai[f.k];
+    h+='<label for="f_'+f.k+'">'+f.l+'</label><input id="f_'+f.k+'" data-k="'+f.k+'"'+(f.num?' class="num" inputmode="numeric"':'')+(f.ph?' placeholder="'+f.ph+'"':'')+' value="'+esc(v)+'">';
+  });
+  $('fForm').innerHTML=h;
+  FKEYS.forEach(function(k){ if(ai.unsure.indexOf(k)>=0)$('f_'+k).classList.add('unsure'); });
+  $('f_memo').value=ai.note?('AIのメモ：'+ai.note):'';
+  renderItems(ai.items.map(function(x){return Object.assign({},x,{_ai:x})}));
+  var sel='';
+  imgs.forEach(function(m,i){sel+='<option value="'+i+'">'+(i+1)+'枚目</option>'});
+  $('pageSel').innerHTML=sel; $('bigImg').src=imgs[0].url;
+  $('confirmBox').hidden=false;
+  $('fForm').addEventListener('input',onEdit);
+  refreshChecks();
+  $('confirmBox').scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('pageSel').onchange=function(){$('bigImg').src=imgs[+this.value].url};
+$('btnZoom').onclick=function(){var v=$('viewer');v.classList.toggle('zoom');this.textContent=v.classList.contains('zoom')?'全体':'拡大'};
+
+function esc(s){return String(s===null||s===undefined?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+var rows=[];
+function renderItems(list){
+  rows=list; var h='';
+  rows.forEach(function(r,i){
+    h+='<tr data-i="'+i+'">'+
+      '<td class="nm"><input data-c="name" value="'+esc(r.name)+'"></td>'+
+      '<td><input data-c="qty" class="num" value="'+esc(r.qty)+'"></td>'+
+      '<td><input data-c="unit" value="'+esc(r.unit)+'" style="min-width:44px"></td>'+
+      '<td><input data-c="price" class="num" inputmode="numeric" value="'+esc(fmt(r.price))+'"></td>'+
+      '<td><input data-c="amount" class="num" inputmode="numeric" value="'+esc(fmt(r.amount))+'"></td>'+
+      '<td><input data-c="rate" class="num" value="'+esc(r.rate)+'" style="min-width:40px"></td>'+
+      '<td><button type="button" class="btn danger" data-del="'+i+'" style="padding:2px 8px" tabindex="-1">×</button></td></tr>';
+  });
+  $('itemsBody').innerHTML=h||'<tr><td colspan="7" class="muted small">明細は読み取れませんでした。必要なら「行を追加」で入れてください。</td></tr>';
+  $('itemsBody').querySelectorAll('input').forEach(function(inp){
+    inp.oninput=function(){
+      var i=+inp.closest('tr').dataset.i, c=inp.dataset.c;
+      rows[i][c]=(c==='price'||c==='amount')?toNum(inp.value):inp.value;
+      markItem(inp,i,c); refreshChecks();
+    };
+    markItem(inp,+inp.closest('tr').dataset.i,inp.dataset.c);
+  });
+  $('itemsBody').querySelectorAll('[data-del]').forEach(function(b){
+    b.onclick=function(){
+      var i=+b.dataset.del, r=rows[i];
+      askDelete('明細の行を削除',
+        '「'+esc(r.name||'（品名なし）')+'」 金額 '+esc(fmt(r.amount)||'—')+' 円 の行を消します。<br>消した行は明細の合計・検算から外れます。',
+        function(){rows.splice(i,1); renderItems(rows); refreshChecks();});
+    };
+  });
+}
+function itemChanged(r,c){
+  if(!r._ai)return true;
+  var a=r._ai[c], b=r[c];
+  if(c==='price'||c==='amount')return toNum(a)!==toNum(b);
+  return toStr(a)!==toStr(b);
+}
+function markItem(inp,i,c){inp.classList.toggle('changed',itemChanged(rows[i],c))}
+$('btnAddItem').onclick=function(){rows.push({name:'',qty:'',unit:'',price:null,amount:null,rate:'10'}); renderItems(rows); var t=$('itemsBody').querySelectorAll('tr'); var inp=t[t.length-1].querySelector('input'); if(inp)inp.focus();};
+
+function getVals(){
+  var o={};
+  FIELDS.forEach(function(f){ if(!f.k)return; var v=$('f_'+f.k).value; o[f.k]=f.num?toNum(v):v.trim(); });
+  o.regNo=o.regNo.normalize('NFKC').replace(/[\s\-‐ー－]/g,'').toUpperCase();
+  return o;
+}
+function onEdit(e){
+  var k=e.target.dataset.k; if(!k)return;
+  var f=FIELDS.filter(function(x){return x.k===k})[0];
+  var v=f.num?toNum(e.target.value):e.target.value.trim(), a=cur.ai[k];
+  if(k==='regNo'){v=v.normalize('NFKC').replace(/[\s\-‐ー－]/g,'').toUpperCase()}
+  e.target.classList.toggle('changed',f.num?(v!==a):(v!==toStr(a)));
+  refreshChecks();
+}
+
+/* 登録番号（法人番号）のチェックデジット：先頭1桁＝9−(Σ Pn×Qn mod 9)。Pnは下から n 桁目、Qnは奇数1・偶数2 */
+function regNoCheck(t){
+  if(!t)return null;
+  var m=/^T(\d{13})$/.exec(t); if(!m)return false;
+  var d=m[1], base=d.slice(1), s=0;
+  for(var n=1;n<=12;n++){ s+=(+base.charAt(12-n))*(n%2?1:2); }
+  return (9-(s%9))===+d.charAt(0);
+}
+
+function doChecks(v,items){
+  var res=[], nz=function(x){return x||0};
+  var sumItems=null;
+  if(items.length){ sumItems=0; items.forEach(function(r){sumItems+=nz(toNum(r.amount))}); }
+  var subAll=nz(v.sub10)+nz(v.sub8)+nz(v.nontax);
+  var taxAll=nz(v.tax10)+nz(v.tax8);
+  // 1 明細合計 = 税抜の合計（税込明細の様式もあるので、税込合計と一致してもOK）
+  if(sumItems===null||!subAll) res.push(['na','明細の合計と税抜金額','比べる数字がありません']);
+  else if(sumItems===subAll) res.push(['ok','明細の合計 = 税抜金額',fmt(sumItems)+' 円']);
+  else if(sumItems===subAll+taxAll) res.push(['ok','明細の合計 = 税込金額',fmt(sumItems)+' 円（明細が税込の様式）']);
+  else res.push(['ng','明細の合計と税抜金額が合いません','明細 '+fmt(sumItems)+' 円 / 税抜 '+fmt(subAll)+' 円（差 '+fmt(sumItems-subAll)+'）']);
+  // 2 消費税
+  var tx=[];
+  [['sub10','tax10',0.10],['sub8','tax8',0.08]].forEach(function(p){
+    if(v[p[0]]&&v[p[1]]!==null){
+      var exp=v[p[0]]*p[2], ok=Math.abs(v[p[1]]-exp)<1.0001;   // 切捨て・四捨五入・切上げを許す
+      tx.push([ok,(p[2]*100)+'%：'+fmt(v[p[0]])+' × '+(p[2]*100)+'% ≒ '+fmt(Math.round(exp))+'（請求書 '+fmt(v[p[1]])+'）']);
+    }
+  });
+  if(!tx.length) res.push(['na','消費税の計算','税抜金額か消費税が空です']);
+  else res.push([tx.every(function(x){return x[0]})?'ok':'ng','消費税の計算',tx.map(function(x){return x[1]}).join(' / ')]);
+  // 3 合計
+  if(v.total===null) res.push(['ng','今回請求額が空です','請求書で必ず読む項目です']);
+  else{
+    var cands=[subAll+taxAll];
+    if(v.carry!==null) cands.push(v.carry+subAll+taxAll);
+    if(v.prevBalance!==null) cands.push(v.prevBalance-nz(v.paid)+subAll+taxAll);
+    if(cands.indexOf(v.total)>=0) res.push(['ok','税抜 + 消費税 = 今回請求額',fmt(v.total)+' 円']);
+    else res.push(['ng','税抜 + 消費税 と 今回請求額が合いません','計算 '+fmt(subAll+taxAll)+' 円 / 請求書 '+fmt(v.total)+' 円']);
+  }
+  // 4 登録番号
+  var rc=regNoCheck(v.regNo);
+  if(rc===null) res.push(['na','登録番号','記載なし（免税事業者か、読み落とし）']);
+  else if(rc) res.push(['ok','登録番号の形式・チェック数字',v.regNo]);
+  else res.push(['ng','登録番号が正しくありません',v.regNo+'（T＋13桁で、先頭の確認用数字が合う必要があります）']);
+  // 5 日付
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(v.date)||isNaN(Date.parse(v.date))) res.push(['ng','請求日の形','YYYY-MM-DD で入れてください']);
+  return res;
+}
+function refreshChecks(){
+  var r=doChecks(getVals(),rows), h='';
+  r.forEach(function(c){ h+='<div class="chk '+c[0]+'"><b>'+(c[0]==='ok'?'✓':c[0]==='ng'?'!':'－')+'</b><span><strong>'+esc(c[1])+'</strong> '+esc(c[2])+'</span></div>'; });
+  if(cur&&cur.ai.unsure.length) h+='<div class="chk na"><b>?</b><span>AIが自信のない項目（赤線）：'+esc(cur.ai.unsure.map(function(k){return FLABEL[k]||k}).join('、'))+'</span></div>';
+  $('checks').innerHTML=h;
+  var d=diffCount();
+  $('diffNote').textContent=d.changed?('直した項目 '+d.changed+' 個'):'直した項目はありません';
+}
+
+/* 直した項目を数える（精度の元データ） */
+function diffCount(){
+  var v=getVals(), ch=[], read=[];
+  FKEYS.forEach(function(k){
+    var a=cur.ai[k], b=v[k], f=FIELDS.filter(function(x){return x.k===k})[0];
+    var aE=(a===null||a===''), bE=(b===null||b==='');
+    if(aE&&bE)return;                    // 請求書に無い項目
+    read.push(k);
+    var same=f.num?(a===b):(toStr(a)===toStr(b));
+    if(!same)ch.push(k);
+  });
+  var itemCh=rows.length!==cur.ai.items.length||rows.some(function(r){return !r._ai||['name','qty','unit','price','amount','rate'].some(function(c){return itemChanged(r,c)})});
+  if(rows.length||cur.ai.items.length){read.push('items'); if(itemCh)ch.push('items');}
+  return {changed:ch.length,changedKeys:ch,readKeys:read};
+}
+
+/* ---------- 保存 ---------- */
+$('btnSave').onclick=async function(){
+  var v=getVals(), d=diffCount();
+  var items=rows.map(function(r){return {name:r.name,qty:r.qty,unit:r.unit,price:toNum(r.price),amount:toNum(r.amount),rate:r.rate}});
+  var checks=doChecks(v,rows);
+  var doc={
+    savedAt:new Date().toISOString(),
+    final:Object.assign({},v,{items:items}),
+    ai:cur.ai,
+    changedKeys:d.changedKeys, readKeys:d.readKeys,
+    checksNg:checks.filter(function(c){return c[0]==='ng'}).map(function(c){return c[1]}),
+    memo:$('f_memo').value.trim(),
+    meta:{sec:cur.sec,tier:cur.tier,pages:cur.pages,sent:cur.sent,split:$('optSplit').checked}
+  };
+  $('btnSave').disabled=true;
+  try{
+    var id='inv_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+    if(db) await db.collection('invoices').doc(id).set(doc);
+    else { var a=lsGet(); doc.id=id; a.push(doc); lsSet(a); saved=a; }
+    setStatus('保存しました（'+(v.vendor||'業者名なし')+' '+fmt(v.total)+' 円）。続けて次の請求書を撮れます。');
+    closeConfirm(true);
+  }catch(e){
+    setStatus('保存できませんでした：'+(e&&e.message||e),true);
+  }finally{$('btnSave').disabled=false;}
+};
+$('btnDiscard').onclick=function(){closeConfirm(true);setStatus('')};
+function closeConfirm(clearImgs){
+  $('confirmBox').hidden=true; $('fForm').removeEventListener('input',onEdit); cur=null;
+  if(clearImgs){imgs.forEach(function(m){URL.revokeObjectURL(m.url)}); imgs=[]; renderThumbs();}
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ---------- Enterで次の欄へ（表示専用は飛ばす、変換中は動かない、最後は実行ボタン） ---------- */
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return;
+  var t=e.target; if(!t.matches||!t.matches('#confirmBox input'))return;
+  e.preventDefault();
+  var list=[].slice.call(document.querySelectorAll('#confirmBox input, #confirmBox textarea')).filter(function(x){return !x.readOnly&&x.tabIndex!==-1&&!x.disabled&&x.offsetParent});
+  var i=list.indexOf(t);
+  if(i>=0&&i<list.length-1)list[i+1].focus(); else $('btnSave').focus();
+});
+/* 明細の表は Excel と同じく ↑↓ で上下の行へ */
+$('itemsBody').addEventListener('keydown',function(e){
+  if(e.key!=='ArrowUp'&&e.key!=='ArrowDown')return;
+  var t=e.target, tr=t.closest('tr'), c=t.dataset.c;
+  var nx=e.key==='ArrowUp'?tr.previousElementSibling:tr.nextElementSibling;
+  if(nx){var inp=nx.querySelector('[data-c="'+c+'"]'); if(inp){e.preventDefault(); inp.focus();}}
+});
+
+/* ---------- 削除の確認 ---------- */
+var mYes=null;
+function askDelete(title,body,fn){ $('mTitle').textContent=title; $('mBody').innerHTML=body; mYes=fn; $('modal').hidden=false; $('mNo').focus(); }
+$('mNo').onclick=function(){$('modal').hidden=true; mYes=null};
+$('mYes').onclick=function(){$('modal').hidden=true; var f=mYes; mYes=null; if(f)f();};
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('modal').hidden)$('mNo').click()});
+
+/* ---------- 一覧・集計 ---------- */
+function allNg(s){return (s.checksNg||[]).length}
+function renderList(){
+  var list=saved.slice().sort(function(a,b){return (b.final.date||'').localeCompare(a.final.date||'')||(b.savedAt||'').localeCompare(a.savedAt||'')});
+  if(!list.length){
+    $('listBody').innerHTML='<tr><td colspan="9"><div class="empty">まだ保存した請求書はありません。「撮影・読取」タブで1枚読み取って確定すると、ここに並び、業者別・現場別に集計されます。</div></td></tr>';
+    $('sumBox').innerHTML=''; return;
+  }
+  var h='';
+  list.forEach(function(s){
+    var f=s.final, sub=(f.sub10||0)+(f.sub8||0)+(f.nontax||0), tax=(f.tax10||0)+(f.tax8||0), ng=allNg(s);
+    h+='<tr><td class="n">'+esc(f.date)+'</td><td>'+esc(f.vendor)+'</td><td>'+esc(f.site)+'</td>'+
+      '<td class="n">'+fmt(sub)+'</td><td class="n">'+fmt(tax)+'</td><td class="n"><b>'+fmt(f.total)+'</b></td>'+
+      '<td>'+(ng?'<span class="pill ng">不一致 '+ng+'</span>':'<span class="pill ok">OK</span>')+'</td>'+
+      '<td class="n">'+(s.changedKeys||[]).length+' / '+(s.readKeys||[]).length+'</td>'+
+      '<td><button class="btn danger" style="padding:2px 10px" data-del="'+esc(s.id)+'">削除</button></td></tr>';
+  });
+  $('listBody').innerHTML=h;
+  $('listBody').querySelectorAll('[data-del]').forEach(function(b){
+    b.onclick=function(){
+      var s=saved.filter(function(x){return x.id===b.dataset.del})[0]; if(!s)return;
+      askDelete('請求書を削除',
+        esc(s.final.date||'日付なし')+'　'+esc(s.final.vendor||'業者名なし')+'　<b>'+fmt(s.final.total)+' 円</b><br>'+
+        '削除すると、一覧・集計と精度の数字からも外れます。元に戻せません。',
+        async function(){
+          try{
+            if(db) await db.collection('invoices').doc(s.id).delete();
+            else { saved=saved.filter(function(x){return x.id!==s.id}); lsSet(saved); renderList(); }
+          }catch(e){alertBox('削除できませんでした：'+(e&&e.message||e))}
+        });
+    };
+  });
+  // 集計
+  var g=$('grpSel').value, m={};
+  list.forEach(function(s){
+    var f=s.final, key=g==='vendor'?(f.vendor||'（業者名なし）'):g==='site'?(f.site||'（現場名なし）'):((f.date||'').slice(0,7)||'（日付なし）');
+    if(!m[key])m[key]={n:0,sub:0,tax:0,total:0};
+    m[key].n++; m[key].sub+=(f.sub10||0)+(f.sub8||0)+(f.nontax||0); m[key].tax+=(f.tax10||0)+(f.tax8||0); m[key].total+=(f.total||0);
+  });
+  var keys=Object.keys(m).sort(function(a,b){return g==='month'?b.localeCompare(a):m[b].total-m[a].total});
+  var t=0; keys.forEach(function(k){t+=m[k].total});
+  var sh='<div class="scroll"><table><thead><tr><th>'+({vendor:'業者',site:'現場・工事',month:'請求月'})[g]+'</th><th class="n">件数</th><th class="n">税抜</th><th class="n">消費税</th><th class="n">請求額合計</th></tr></thead><tbody>';
+  keys.forEach(function(k){var r=m[k]; sh+='<tr><td>'+esc(k)+'</td><td class="n">'+r.n+'</td><td class="n">'+fmt(r.sub)+'</td><td class="n">'+fmt(r.tax)+'</td><td class="n"><b>'+fmt(r.total)+'</b></td></tr>';});
+  sh+='<tr><th>合計</th><th class="n">'+list.length+'</th><th></th><th></th><th class="n">'+fmt(t)+'</th></tr></tbody></table></div>';
+  $('sumBox').innerHTML=sh;
+}
+$('grpSel').onchange=renderList;
+function alertBox(msg){$('mTitle').textContent='お知らせ';$('mBody').textContent=msg;mYes=null;$('mYes').hidden=true;$('modal').hidden=false;$('mNo').textContent='閉じる';$('mNo').onclick=function(){$('modal').hidden=true;$('mYes').hidden=false;$('mNo').textContent='やめる';$('mNo').onclick=function(){$('modal').hidden=true;mYes=null}};}
+
+/* CSV（Excelで開けるよう BOM 付き） */
+$('btnCsv').onclick=async function(){
+  if(!saved.length){alertBox('保存した請求書がまだありません。');return;}
+  var head=['請求日','業者名','登録番号','請求書番号','現場・工事名','税抜10%','消費税10%','税抜8%','消費税8%','非課税','今回請求額','支払期日','振込先','口座種別','口座番号','口座名義','明細行数','検算の不一致','直した項目','読取秒','モデル','メモ'];
+  var q=function(x){x=x===null||x===undefined?'':String(x);return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+  var lines=[head.join(',')];
+  saved.forEach(function(s){var f=s.final;
+    lines.push([f.date,f.vendor,f.regNo,f.invNo,f.site,f.sub10,f.tax10,f.sub8,f.tax8,f.nontax,f.total,f.due,f.bank,f.acctType,f.acctNo,f.acctName,(f.items||[]).length,(s.checksNg||[]).join(' / '),(s.changedKeys||[]).map(function(k){return FLABEL[k]||k}).join(' / '),s.meta&&s.meta.sec,s.meta&&s.meta.tier,s.memo].map(q).join(','));
+  });
+  var csv='﻿'+lines.join('\r\n');
+  var d=new Date(), name='請求書読取テスト_'+d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)+'.csv';
+  if(!dl){
+    if(window.claude){alertBox('この画面からはファイルを保存できません。');return;}
+    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=name;
+    document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href); a.remove();},1000); return;
+  }
+  try{await dl.save({filename:name,data:new Blob([csv],{type:'text/csv'})})}catch(e){ if(e&&e.code!=='declined'&&e.code!=='cancelled')alertBox('保存できませんでした：'+(e.message||e.code)); }
+};
+
+/* ---------- 精度 ---------- */
+function renderAcc(){
+  if(!saved.length){$('accStats').innerHTML='<div class="empty" style="flex:1">請求書を確定すると、項目ごとの正解率がここに出ます。</div>';$('accBody').innerHTML='';return;}
+  var per={}, tr=0, tc=0, perfect=0, secs=0;
+  saved.forEach(function(s){
+    (s.readKeys||[]).forEach(function(k){per[k]=per[k]||{r:0,c:0};per[k].r++;tr++;});
+    (s.changedKeys||[]).forEach(function(k){per[k]=per[k]||{r:0,c:0};per[k].c++;tc++;});
+    if(!(s.changedKeys||[]).length)perfect++;
+    secs+=(s.meta&&s.meta.sec)||0;
+  });
+  $('accStats').innerHTML=
+    '<div class="stat"><div class="v">'+saved.length+'</div><div class="k">確定した請求書</div></div>'+
+    '<div class="stat"><div class="v">'+(tr?Math.round((tr-tc)/tr*1000)/10:0)+'%</div><div class="k">項目の正解率（'+(tr-tc)+' / '+tr+'）</div></div>'+
+    '<div class="stat"><div class="v">'+perfect+'</div><div class="k">1か所も直さずに済んだ枚数</div></div>'+
+    '<div class="stat"><div class="v">'+Math.round(secs/saved.length)+'秒</div><div class="k">1枚の平均読取時間</div></div>';
+  var keys=FKEYS.concat(['items']).filter(function(k){return per[k]});
+  keys.sort(function(a,b){return (per[b].c/per[b].r)-(per[a].c/per[a].r)});
+  var h='';
+  keys.forEach(function(k){var p=per[k], rate=(p.r-p.c)/p.r;
+    h+='<tr><td>'+esc(FLABEL[k])+'</td><td class="n">'+p.r+'</td><td class="n">'+p.c+'</td><td class="n">'+Math.round(rate*100)+'%</td><td><div class="bar"><i style="width:'+Math.round((1-rate)*100)+'%"></i></div></td></tr>';
+  });
+  $('accBody').innerHTML=h;
+}
+
+/* ---------- 起動 ---------- */
+function onData(){ if(!$('p-list').hidden)renderList(); if(!$('p-acc').hidden)renderAcc(); }
+(async function(){
+  saved=lsGet();
+  setAi('wait');
+  if(!window.claude||!claude.use){ setAi(getKey()?'api':'nokey'); renderThumbs(); return; }
+  var got=await Promise.all(['sample','downloads','db'].map(function(n){return claude.use(n).catch(function(){return null})}));
+  sample=got[0]; dl=got[1]; db=got[2];
+  if(sample){
+    var lim=null; try{ lim=await sample.limits(); }catch(e){ aiDetail='limits: '+((e&&(e.code||e.message))||e); }
+    if(lim&&!lim.images){ setAi('noimg'); }
+    else { if(lim){ MAXIMG=Math.max(1,Math.min(4,lim.images.maxCount)); $('maxImg').textContent=MAXIMG; } setAi('ok'); }
+  }else setAi('none');
+  if(db){
+    db.collection('invoices').onSnapshot(function(snap){
+      saved=snap.docs.map(function(d){var o=d.data()||{};o.id=d.id;return o}).filter(function(o){return o.final});
+      onData();
+    },function(e){ setStatus('保存先に接続できません：'+(e&&e.message||e.code),true); });
+  }
+  renderThumbs();
+})();
+})();
+</script>
+
+</body></html>
