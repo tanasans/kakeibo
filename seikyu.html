@@ -233,8 +233,16 @@ td input{width:100%;padding:4px 6px}
     <h2>工事一覧</h2>
     <p class="small muted" style="margin:0">工事台帳アプリの設定タブ →「工事一覧」CSV を読み込みます（読み込み直すと入れ替わります）。一覧はこの端末にだけ保存され、読み取りのときにAIへも渡します。</p>
     <div class="row">
-      <label class="pick sm">工事一覧CSVを読み込む<input type="file" id="kojiIn" accept=".csv,text/csv"></label>
+      <label class="pick sm">CSVを読み込む（工事一覧・呼び名）<input type="file" id="kojiIn" accept=".csv,text/csv"></label>
       <span class="small" id="kojiInfo"></span>
+    </div>
+    <h3>決めた呼び名</h3>
+    <p class="small muted" style="margin:0">業者に関係なく、現場名にこの言葉が入っていたらこの工事にします（例：千代3丁目 → TERRAce HAKATAⅡ）。業者ごとに覚えた書き方の次に優先します。</p>
+    <div class="scroll"><table><thead><tr><th>呼び名</th><th>工事</th><th></th></tr></thead><tbody id="namesBody"></tbody></table></div>
+    <div class="row">
+      <input id="nmText" placeholder="呼び名（例：千代3丁目）" style="flex:1;min-width:140px">
+      <input id="nmKoji" placeholder="工事を選ぶ" style="flex:2;min-width:180px">
+      <button class="btn sm" id="nmAdd" type="button">追加</button>
     </div>
     <h3>覚えた現場名</h3>
     <p class="small muted" style="margin:0">確定したときに「この業者がこう書いたら、この工事」を覚えます。次からは同じ書き方を自動でその工事にします。</p>
@@ -294,7 +302,7 @@ var SPECIAL=[
   {no:'*小額',name:'小額工事分（雑工事）'},
   {no:'*補修',name:'リペア補修工事'},
   {no:'*事務所',name:'事務所設置廃棄物処理費'},
-  {no:'*共通',name:'共通経費分'},
+  {no:'*共通',name:'共通経費分（会社事務所を含む）'},
   {no:'*不明',name:'現場不明'}
 ];
 
@@ -307,6 +315,15 @@ var imgs=[], cur=null, ctl=null, saved=[], rows=[];
 var sample=null, db=null, dl=null;
 var KOJI=lsGetJ(LS_KOJI,{list:[],at:''});   // {list:[{no,name,client,addr,kubun}], at}
 var ALIAS=lsGetJ(LS_ALIAS,{});              // "業者|現場名" → {no, vendor, site, at}
+var LS_NAMES='seikyu-names-v1';
+var NAMES=lsGetJ(LS_NAMES,[]);              // [{text, no}] 業者に関係なく当てはめる呼び名
+/* 会社事務所（旧 *日佐）は共通経費に入れる（2026-09-30 本人指定）。前に読み込んだ呼び名・記憶も付け替える */
+(function(){
+  var ch=false;
+  NAMES.forEach(function(n){ if(n.no==='*日佐'){ n.no='*共通'; ch=true; } });
+  Object.keys(ALIAS).forEach(function(k){ if(ALIAS[k].no==='*日佐'){ ALIAS[k].no='*共通'; ch=true; } });
+  if(ch){ lsSetJ(LS_NAMES,NAMES); lsSetJ(LS_ALIAS,ALIAS); }
+})();
 
 /* ---------- タブ ---------- */
 document.querySelectorAll('.tab').forEach(function(b){
@@ -359,6 +376,18 @@ $('kojiIn').onchange=async function(e){
   try{
     var rowsC=parseCsv(decodeCsv(await f.arrayBuffer()));
     var h=rowsC[0]||[], ix=function(n){return h.indexOf(n)};
+    /* 呼び名のCSV（呼び名,工事№,メモ）も同じボタンで読む。同じ呼び名は上書き、ほかは残す */
+    if(ix('呼び名')>=0){
+      var iT=ix('呼び名'), iN=ix('工事№'); if(iN<0) throw new Error('「工事№」の列が見つかりません。');
+      var n=0;
+      rowsC.slice(1).forEach(function(r){
+        var t=(r[iT]||'').trim(), no=String(r[iN]||'').trim(); if(!t||!no)return;
+        NAMES=NAMES.filter(function(x){return normSite(x.text)!==normSite(t)}); NAMES.push({text:t,no:no}); n++;
+      });
+      lsSetJ(LS_NAMES,NAMES); renderKoji();
+      alertBox('呼び名を '+n+' 件読み込みました。'+(KOJI.list.length?'':'工事一覧のCSVも読み込んでください。'));
+      return;
+    }
     var iNo=ix('№'), iName=ix('工事名'), iCli=ix('注文者'), iAddr=ix('現場住所'), iKb=ix('区分');
     if(iNo<0||iName<0) throw new Error('「№」「工事名」の列が見つかりません。工事台帳アプリの「工事一覧」CSVを選んでください。');
     var list=rowsC.slice(1).filter(function(r){return r[iName]}).map(function(r){
@@ -388,6 +417,15 @@ function renderKoji(){
   var h='';
   KOJI.list.forEach(function(k){ h+='<tr><td class="n">'+esc(k.no)+'</td><td>'+esc(k.name)+'</td><td>'+esc(k.client)+'</td><td>'+esc(k.addr)+'</td></tr>'; });
   $('kojiBody').innerHTML=h||'<tr><td colspan="4" class="muted">工事一覧CSVを読み込むと、ここに並びます。</td></tr>';
+  var nh='';
+  NAMES.forEach(function(n,i){ nh+='<tr><td>'+esc(n.text)+'</td><td>'+esc(kojiLabel(n.no))+'</td><td><button class="btn danger sm" data-n="'+i+'">削除</button></td></tr>'; });
+  $('namesBody').innerHTML=nh||'<tr><td colspan="3" class="muted">まだありません。</td></tr>';
+  $('namesBody').querySelectorAll('[data-n]').forEach(function(b){
+    b.onclick=function(){ var n=NAMES[+b.dataset.n]; if(!n)return;
+      askConfirm('呼び名を削除','「'+esc(n.text)+'」→ '+esc(kojiLabel(n.no))+'<br>削除すると、この言葉が入った現場名は自動で当てはまらなくなります（業者ごとに覚えた書き方は残ります）。','削除する','danger',
+        function(){ NAMES.splice(NAMES.indexOf(n),1); lsSetJ(LS_NAMES,NAMES); renderKoji(); });
+    };
+  });
   var keys=Object.keys(ALIAS).sort(), a='';
   keys.forEach(function(key){ var r=ALIAS[key];
     a+='<tr><td>'+esc(r.vendor)+'</td><td>'+esc(r.site)+'</td><td>'+esc(kojiLabel(r.no))+'</td><td><button class="btn danger sm" data-k="'+esc(key)+'">削除</button></td></tr>'; });
@@ -424,13 +462,20 @@ function matchByName(site){
   });
   return (best&&!tie)?best.no:null;
 }
+/* 呼び名：業者に関係なく「この言葉が入っていたらこの工事」。複数の呼び名が別々の工事に当たるときは決めない */
+function matchByNames(site){
+  var s=normSite(site), hit={};
+  NAMES.forEach(function(n){ var t=normSite(n.text); if(t.length>=2&&s.indexOf(t)>=0&&kojiByNo(n.no)) hit[n.no]=1; });
+  var ks=Object.keys(hit); return ks.length===1?ks[0]:null;
+}
 function suggestKoji(vendor,site,aiNo){
   if(site){ var a=ALIAS[aliasKey(vendor,site)]; if(a&&kojiByNo(a.no)) return {no:a.no,src:'memory'}; }
+  var nm=site?matchByNames(site):null; if(nm) return {no:nm,src:'named'};
   if(aiNo&&kojiByNo(String(aiNo))) return {no:String(aiNo),src:'ai'};
   var m=site?matchByName(site):null; if(m) return {no:m,src:'name'};
   return {no:'',src:''};
 }
-var SRC_PILL={memory:'<span class="pill ok">記憶</span>',ai:'<span class="pill info">AI</span>',name:'<span class="pill warn">名前</span>',manual:'<span class="pill">手入力</span>'};
+var SRC_PILL={memory:'<span class="pill ok">記憶</span>',named:'<span class="pill ok">呼び名</span>',ai:'<span class="pill info">AI</span>',name:'<span class="pill warn">名前</span>',manual:'<span class="pill">手入力</span>'};
 
 /* ---------- 写真 ---------- */
 var MAXIMG=4;
@@ -513,7 +558,8 @@ desc,
 '・手書きの数字は特に注意して読み、あいまいなら unsure に入れる。',
 '・当社（宛先）の住所・電話・口座を請求元のものと取り違えないこと。',
 '',
-kl?('当社の工事一覧（№｜工事名｜注文者｜現場住所）：\n'+kl):'（工事一覧はありません。kojiNo はすべて null にしてください）'
+(NAMES.length?'当社で決めている呼び名（この言葉が現場名に入っていたら、この工事）：\n'+NAMES.map(function(n){return n.text+' → '+(n.no.charAt(0)==='*'?'（工事一覧外。kojiNo は null）':n.no)}).join('\n')+'\n\n':'')+
+(kl?('当社の工事一覧（№｜工事名｜注文者｜現場住所）：\n'+kl):'（工事一覧はありません。kojiNo はすべて null にしてください）')
   ].join('\n');
 }
 
@@ -752,7 +798,14 @@ function renderItems(list){
     };
     markItem(inp,+inp.closest('tr').dataset.i,inp.dataset.c);
   });
-  $('itemsBody').querySelectorAll('.kojiIn').forEach(function(inp){ attachCombo(inp); });
+  $('itemsBody').querySelectorAll('.kojiIn').forEach(function(inp){
+    var row=function(){ return rows[+inp.closest('tr').dataset.i]; };
+    attachCombo(inp,function(){ return row().koji; },function(no){
+      var r=row(); r.koji=no; r.src=(no===r.sugNo)?r.sugSrc:'manual';
+      inp.closest('td').querySelector('.siteTxt').innerHTML=(SRC_PILL[r.src]||'')+'<span>'+(r.site?'請求書：'+esc(r.site):'現場名の記載なし')+'</span>';
+      refreshChecks();
+    });
+  });
   $('itemsBody').querySelectorAll('[data-del]').forEach(function(b){
     b.onclick=function(){
       var i=+b.dataset.del, r=rows[i];
@@ -785,16 +838,16 @@ $('btnFillDown').onclick=function(){
 
 /* 工事の候補リスト：打った文字を「含む」工事を欄の下に出す（入らなければ上）。↑↓で選び Enter で決定、Esc で閉じる */
 var comboEl=null;
-function attachCombo(inp){
+function attachCombo(inp,getNo,setNo){
   var list=null, items=[], on=-1;
-  function row(){ return rows[+inp.closest('tr').dataset.i]; }
+  /* getNo：今の工事№を返す、setNo(no)：選んだ工事を反映する */
   function close(restore){
     if(list){ list.remove(); list=null; comboEl=null; }
-    if(restore){ inp.value=kojiLabel(row().koji); }
+    if(restore){ inp.value=kojiLabel(getNo()); }
   }
   function open(){
     var q=normKana(inp.value), all=SPECIAL.concat(KOJI.list);
-    if(inp.value===kojiLabel(row().koji)) q='';   // 決まった工事が表示されているときは全件を出す
+    if(inp.value===kojiLabel(getNo())) q='';   // 決まった工事が表示されているときは全件を出す
     items=all.filter(function(k){ return !q||normKana(k.no+' '+k.name+' '+k.client+' '+k.addr).indexOf(q)>=0; }).slice(0,60);
     if(!list){ list=document.createElement('div'); list.className='combo-list'; list.setAttribute('role','listbox'); document.body.appendChild(list); comboEl=list; }
     list.innerHTML=items.length?items.map(function(k,i){
@@ -817,12 +870,8 @@ function attachCombo(inp){
     var el=list.querySelector('.on'); if(el){ var t=el.offsetTop, b=t+el.offsetHeight; if(t<list.scrollTop)list.scrollTop=t; else if(b>list.scrollTop+list.clientHeight)list.scrollTop=b-list.clientHeight; }
   }
   function pick(i){
-    var k=items[i]; if(!k)return; var r=row();
-    r.koji=k.no; r.src=(k.no===r.sugNo)?r.sugSrc:'manual';
-    close(true);
-    var cell=inp.closest('td').querySelector('.siteTxt');
-    cell.innerHTML=(SRC_PILL[r.src]||'')+'<span>'+(r.site?'請求書：'+esc(r.site):'現場名の記載なし')+'</span>';
-    refreshChecks();
+    var k=items[i]; if(!k)return;
+    setNo(k.no); close(true);
   }
   inp.addEventListener('focus',function(){ inp.select(); open(); });
   inp.addEventListener('input',open);
@@ -836,6 +885,18 @@ function attachCombo(inp){
     else if(e.key==='Escape'){ close(true); e.preventDefault(); e.stopPropagation(); }
   });
 }
+/* 呼び名の追加 */
+var nmNo='';
+attachCombo($('nmKoji'),function(){return nmNo},function(no){nmNo=no});
+$('nmText').addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){ e.preventDefault(); $('nmKoji').focus(); } });
+$('nmKoji').addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229&&!comboEl){ e.preventDefault(); $('nmAdd').focus(); } });
+$('nmAdd').onclick=function(){
+  var t=$('nmText').value.trim();
+  if(normSite(t).length<2){ alertBox('呼び名は2文字以上で入れてください。'); $('nmText').focus(); return; }
+  if(!nmNo){ alertBox('工事を選んでください。'); $('nmKoji').focus(); return; }
+  NAMES=NAMES.filter(function(x){return normSite(x.text)!==normSite(t)}); NAMES.push({text:t,no:nmNo});
+  lsSetJ(LS_NAMES,NAMES); $('nmText').value=''; nmNo=''; $('nmKoji').value=''; renderKoji(); $('nmText').focus();
+};
 window.addEventListener('scroll',function(e){ if(comboEl&&e.target!==comboEl){ var a=document.activeElement; if(a&&a.blur)a.blur(); } },true);
 
 /* 工事別の内訳（明細の金額を工事ごとに合計） */
@@ -1100,7 +1161,7 @@ $('btnCsv').onclick=function(){
   });
   saveCsv('請求書読取テスト_'+today()+'.csv',L);
 };
-var SRC_NAME={memory:'記憶',ai:'AI',name:'名前',manual:'手入力','':'なし'};
+var SRC_NAME={memory:'記憶',named:'呼び名',ai:'AI',name:'名前',manual:'手入力','':'なし'};
 $('btnCsvItems').onclick=function(){
   if(!saved.length){alertBox('保存した請求書がまだありません。');return;}
   var L=[['請求日','支払日','業者名','請求書の現場名','工事№','工事名','当てはめ方','最初の候補№','品名・摘要','数量','単位','単価','金額','税率']];
@@ -1142,7 +1203,7 @@ function renderAcc(){
     ks[k].n++; if(it.sugNo&&it.koji===it.sugNo) ks[k].keep++;
   }); });
   var kh='';
-  ['memory','ai','name',''].forEach(function(k){ if(!ks[k])return;
+  ['memory','named','ai','name',''].forEach(function(k){ if(!ks[k])return;
     kh+='<tr><td>'+(k?SRC_PILL[k]:'<span class="pill ng">候補なし</span>')+'</td><td class="n">'+ks[k].n+'</td><td class="n">'+ks[k].keep+'</td><td class="n">'+(ks[k].n-ks[k].keep)+'</td></tr>'; });
   $('accKoji').innerHTML=kh||'<tr><td colspan="4" class="muted">工事の当てはめを入れてから確定した請求書がまだありません。</td></tr>';
 }
