@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"></head><body>
 <title>請求書読取テスト</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Kaku+Gothic+New:wght@500;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
@@ -114,6 +115,7 @@ td input{width:100%;padding:4px 6px}
 .modal{background:var(--paper);border-radius:8px;padding:18px;max-width:460px;width:100%;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow:auto}
 .empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:6px}
 /* 工事の候補リスト（入力欄の下、入らなければ上に開く） */
+.xlbox{border:1px solid var(--accent);background:var(--accent-weak);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .combo-list{position:fixed;z-index:15;background:var(--paper);border:1px solid var(--accent);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.18);overflow-y:auto;font-size:13px}
 .combo-list div{padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
 .combo-list div small{color:var(--muted);display:block;font-size:11px}
@@ -211,6 +213,17 @@ td input{width:100%;padding:4px 6px}
         <button class="btn" id="btnCsv">請求書CSV</button>
         <button class="btn" id="btnCsvItems">明細CSV</button>
       </div>
+    </div>
+    <div class="xlbox">
+      <h3>Excelに出す</h3>
+      <div class="row">
+        <label class="opt" for="paySel">支払日</label>
+        <select id="paySel"></select>
+        <button class="btn primary" id="btnXlPay" type="button">請求額一覧表</button>
+        <button class="btn primary" id="btnXlKoji" type="button">現場別支払先別一覧表</button>
+      </div>
+      <p class="small muted" style="margin:0">請求額一覧表＝業者ごとの支払額と振込先（支払額の合計を確かめる用）。現場別支払先別一覧表＝工事ごと・業者ごとの金額（原価報告書に書き写す用）。どちらも選んだ支払日の請求書だけを出し、2つの合計は一致します。</p>
+      <div id="xlNote" class="small"></div>
     </div>
     <div id="sumBox"></div>
     <div class="scroll"><table><thead><tr>
@@ -466,11 +479,29 @@ function matchByName(site){
 function matchByNames(site){
   var s=normSite(site), hit={};
   NAMES.forEach(function(n){ var t=normSite(n.text); if(t.length>=2&&s.indexOf(t)>=0&&kojiByNo(n.no)) hit[n.no]=1; });
-  var ks=Object.keys(hit); return ks.length===1?ks[0]:null;
+  var ks=Object.keys(hit); if(ks.length===1) return ks[0];
+  /* 「日佐事務所（千代3丁目新築工事）」のように事務所と工事の両方に当たるときは工事を取る */
+  var real=ks.filter(function(no){return no.charAt(0)!=='*'});
+  return real.length===1?real[0]:null;
+}
+/* 呼び名の言葉を取り除いた残り（「日佐事務所（石田様邸）」→「石田様邸」） */
+function restOfNames(site){
+  var s=normSite(site);
+  NAMES.forEach(function(n){ var t=normSite(n.text); if(t.length>=2) s=s.split(t).join(''); });
+  return s;
 }
 function suggestKoji(vendor,site,aiNo){
   if(site){ var a=ALIAS[aliasKey(vendor,site)]; if(a&&kojiByNo(a.no)) return {no:a.no,src:'memory'}; }
-  var nm=site?matchByNames(site):null; if(nm) return {no:nm,src:'named'};
+  var nm=site?matchByNames(site):null;
+  /* 事務所など工事一覧外の振り先に当たっても、ほかに現場が書かれていれば（届け先が事務所なだけ）そちらを優先する */
+  if(nm&&nm.charAt(0)==='*'){
+    var rest=restOfNames(site);
+    if(rest.replace(NOISE,'').length>=2){
+      if(aiNo&&String(aiNo).charAt(0)!=='*'&&kojiByNo(String(aiNo))) return {no:String(aiNo),src:'ai'};
+      var mr=matchByName(rest); if(mr) return {no:mr,src:'name'};
+    }
+  }
+  if(nm) return {no:nm,src:'named'};
   if(aiNo&&kojiByNo(String(aiNo))) return {no:String(aiNo),src:'ai'};
   var m=site?matchByName(site):null; if(m) return {no:m,src:'name'};
   return {no:'',src:''};
@@ -1089,6 +1120,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('modal')
 function payOf(f){ return f.pay!==undefined&&f.pay!==null?f.pay:monthPart(f); }
 function dueOf(f){ return f.due||autoDue(f.date); }
 function renderList(){
+  renderPaySel();
   var list=saved.slice().sort(function(a,b){return (b.final.date||'').localeCompare(a.final.date||'')||(b.savedAt||'').localeCompare(a.savedAt||'')});
   if(!list.length){
     $('listBody').innerHTML='<tr><td colspan="9"><div class="empty">まだ保存した請求書はありません。「撮影・読取」タブで1枚読み取って確定すると、ここに並び、工事別・業者別・支払日別に集計されます。</div></td></tr>';
@@ -1171,6 +1203,199 @@ $('btnCsvItems').onclick=function(){
     });
   });
   saveCsv('請求書明細_'+today()+'.csv',L);
+};
+
+/* ---------- Excel 出力（工事台帳アプリの buildSheetXlsx と同じ作り。雛形なしでその場で組み立てる） ---------- */
+var XL_NS='xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+function xesc(s){return String(s===null||s===undefined?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]}).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'')}
+function colName(i){var s='';while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=(i-m-1)/26;}return s}
+function serial(iso){ if(!iso)return null; var d=new Date(iso+'T00:00:00Z'); if(isNaN(d.getTime()))return null; return Math.round((d.getTime()-Date.UTC(1899,11,30))/86400000); }
+var XL_STYLES='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+ +'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+ +'<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0"/><numFmt numFmtId="165" formatCode="yyyy/mm/dd"/></numFmts>'
+ +'<fonts count="3"><font><sz val="11"/><name val="游ゴシック"/></font><font><b/><sz val="11"/><name val="游ゴシック"/></font><font><b/><sz val="14"/><name val="游ゴシック"/></font></fonts>'
+ +'<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
+ +'<fill><patternFill patternType="solid"><fgColor rgb="FFEFEFEA"/><bgColor indexed="64"/></patternFill></fill>'
+ +'<fill><patternFill patternType="solid"><fgColor rgb="FFE3EDF4"/><bgColor indexed="64"/></patternFill></fill></fills>'
+ +'<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
+ +'<border><left style="thin"><color rgb="FF999999"/></left><right style="thin"><color rgb="FF999999"/></right><top style="thin"><color rgb="FF999999"/></top><bottom style="thin"><color rgb="FF999999"/></bottom><diagonal/></border></borders>'
+ +'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+ +'<cellXfs count="11">'
+ +'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'                                   /* 0 既定 */
+ +'<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'                     /* 1 表題 */
+ +'<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' /* 2 見出し */
+ +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" shrinkToFit="1"/></xf>' /* 3 文字（縮小して全体を表示） */
+ +'<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>' /* 4 金額 */
+ +'<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>' /* 5 日付 */
+ +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" shrinkToFit="1"/></xf>' /* 6 中央 */
+ +'<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" shrinkToFit="1"/></xf>' /* 7 合計の文字 */
+ +'<xf numFmtId="164" fontId="1" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>' /* 8 合計の金額 */
+ +'<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" shrinkToFit="1"/></xf>' /* 9 工事の見出し行 */
+ +'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="right"/></xf>' /* 10 右寄せ（罫線なし） */
+ +'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+/* k：s文字 m金額 d日付 c中央 h見出し t表題 T合計文字 M合計金額 g工事見出し n罫線なし r右寄せ */
+var XL_ST={s:'3',m:'4',d:'5',c:'6',h:'2',t:'1',T:'7',M:'8',g:'9',n:'0',r:'10'};
+function xlCell(ref,cell){
+  if(!cell)return '';
+  var st=XL_ST[cell.k]||'3', v=cell.v;
+  if(v===''||v===null||v===undefined) return cell.k==='n'||cell.k==='t'||cell.k==='r'?'':'<c r="'+ref+'" s="'+st+'"/>';
+  if(cell.k==='m'||cell.k==='M') return '<c r="'+ref+'" s="'+st+'"><v>'+Number(v)+'</v></c>';
+  if(cell.k==='d'){ var sv=serial(v); return sv===null?'<c r="'+ref+'" s="'+st+'"/>':'<c r="'+ref+'" s="'+st+'"><v>'+sv+'</v></c>'; }
+  return '<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(v)+'</t></is></c>';
+}
+async function buildSheetXlsx(opt){
+  if(typeof JSZip==='undefined') throw new Error('Excelを作る部品を読み込めませんでした。電波の良い所でページを開き直してください。');
+  var sd='';
+  opt.rows.forEach(function(cells,i){
+    var r=i+1, inner='';
+    cells.forEach(function(c,j){ inner+=xlCell(colName(j+1)+r,c); });
+    if(inner) sd+='<row r="'+r+'">'+inner+'</row>';
+  });
+  var ncol=opt.widths.length, last=colName(ncol)+opt.rows.length, fz=opt.freezeRow||0;
+  var pane=fz?'<pane ySplit="'+fz+'" topLeftCell="A'+(fz+1)+'" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A'+(fz+1)+'" sqref="A'+(fz+1)+'"/>':'';
+  var sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    /* fitToPage が無いと「横1ページに合わせる」が効かない */
+    +'<worksheet '+XL_NS+'><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:'+last+'"/>'
+    +'<sheetViews><sheetView tabSelected="1" workbookViewId="0" showGridLines="0">'+pane+'</sheetView></sheetViews>'
+    +'<sheetFormatPr defaultRowHeight="18"/>'
+    +'<cols>'+opt.widths.map(function(w,i){return '<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>'}).join('')+'</cols>'
+    +'<sheetData>'+sd+'</sheetData>'
+    +'<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>'
+    +'<pageSetup paperSize="9" orientation="'+(opt.orientation||'landscape')+'" fitToWidth="1" fitToHeight="0"/>'
+    /* 印刷時の見出しの繰り返しは workbook の definedName で指定 */
+    +'</worksheet>';
+  var zip=new JSZip();
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  /* bookViews が無いと Excel 2013 は印刷プレビュー／印刷で落ちる（工事台帳アプリで実機確認済み） */
+  zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook '+XL_NS+'><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="16384" windowHeight="8192"/></bookViews>'
+    +'<sheets><sheet name="'+xesc(opt.sheetName)+'" sheetId="1" r:id="rId1"/></sheets>'
+    +(fz?'<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">\''+xesc(opt.sheetName)+'\'!$1:$'+fz+'</definedName></definedNames>':'')
+    +'</workbook>');
+  zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  zip.file('xl/styles.xml',XL_STYLES);
+  zip.file('xl/worksheets/sheet1.xml',sheet);
+  Object.keys(zip.files).forEach(function(n){ if(zip.files[n].dir) delete zip.files[n]; });
+  return await zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+async function saveBlob(name,blob){
+  if(dl){ try{ await dl.save({filename:name,data:blob}); }catch(e){ if(e&&e.code!=='declined'&&e.code!=='cancelled')alertBox('保存できませんでした：'+(e.message||e.code)); } return; }
+  if(window.claude){alertBox('この画面からはファイルを保存できません。');return;}
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href); a.remove();},1500);
+}
+
+/* 支払日の選択肢（新しい順） */
+var paySelInit=false;   // 最初は一番新しい支払日を選んでおく
+function renderPaySel(){
+  var cur=paySelInit?$('paySel').value:null, ds={};
+  saved.forEach(function(s){ var d=normDate(dueOf(s.final)); if(d) ds[d]=(ds[d]||0)+1; });
+  var keys=Object.keys(ds).sort().reverse();
+  $('paySel').innerHTML=keys.map(function(d){return '<option value="'+d+'">'+d.replace(/-/g,'/')+'（'+ds[d]+'枚）</option>'}).join('')+'<option value="">すべて</option>';
+  if(cur!==null&&(cur===''||ds[cur])) $('paySel').value=cur;
+  else if(keys.length) $('paySel').value=keys[0];
+  paySelInit=keys.length>0;
+}
+function pickPay(){ var d=$('paySel').value; return saved.filter(function(s){ return !d||normDate(dueOf(s.final))===d; }); }
+function todayIso(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }   // 日本時間の今日（toISOString は世界時なので朝9時前は前日になる）
+function jpDate(iso){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m?(m[1]+'年'+(+m[2])+'月'+(+m[3])+'日'):''; }
+function sortVendor(a,b){ return normKana(a.final.vendor||'').localeCompare(normKana(b.final.vendor||''),'ja'); }
+
+/* 1枚の請求書の今月分（税抜・消費税）を、明細の金額の割合で工事に割り振る。
+   明細が税込の様式でも、値引き行があっても、工事ごとの合計が請求書の金額とぴったり一致するよう端数は大きい順に配る */
+function allocate(total,weights){
+  var sum=weights.reduce(function(a,b){return a+b},0), out=weights.map(function(){return 0});
+  if(!weights.length) return out;
+  if(!sum){ out[0]=total; return out; }
+  var raw=weights.map(function(w){return total*w/sum}), fl=raw.map(Math.floor), rest=total-fl.reduce(function(a,b){return a+b},0);
+  var ord=raw.map(function(r,i){return [r-fl[i],i]}).sort(function(a,b){return b[0]-a[0]});
+  for(var k=0;k<rest&&k<ord.length;k++) fl[ord[k][1]]++;
+  return fl;
+}
+function splitByKoji(f){
+  var sub=(f.sub10||0)+(f.sub8||0)+(f.nontax||0), tax=(f.tax10||0)+(f.tax8||0);
+  var g={}, order=[];
+  (f.items||[]).forEach(function(it){ var k=it.koji||''; var a=toNum(it.amount)||0; if(!(k in g)){g[k]=0;order.push(k);} g[k]+=a; });
+  if(!order.length){ order=['']; g['']=1; }
+  if(!sub&&!tax){ sub=order.reduce(function(s,k){return s+g[k]},0); }   // 金額欄が空の請求書は明細の金額をそのまま使う
+  var w=order.map(function(k){return g[k]}), ss=allocate(sub,w), ts=allocate(tax,w);
+  return order.map(function(k,i){ return {koji:k,sub:ss[i],tax:ts[i]}; });
+}
+function itemSummary(f,koji){
+  var names=(f.items||[]).filter(function(it){return (it.koji||'')===koji&&it.name}).map(function(it){return it.name});
+  var s=names.slice(0,3).join('、'); if(names.length>3) s+=' ほか'+(names.length-3)+'件';
+  return s;
+}
+function kojiSortKey(no){
+  if(!no) return [3,0,''];
+  if(no.charAt(0)==='*'){ var i=SPECIAL.map(function(x){return x.no}).indexOf(no); return [2,i,no]; }
+  var n=parseInt(no,10); return isNaN(n)?[1,0,no]:[0,n,no];
+}
+function cmpKoji(a,b){ var x=kojiSortKey(a), y=kojiSortKey(b); return x[0]-y[0]||x[1]-y[1]||String(x[2]).localeCompare(String(y[2])); }
+function xlHeader(title,payIso,list){
+  return [[{v:title,k:'t'}],[{v:(payIso?'支払日 '+jpDate(payIso):'支払日 すべて')+'　請求書 '+list.length+'枚',k:'n'},null,null,null,null,null,{v:'出力日 '+jpDate(todayIso()),k:'r'}],[]];
+}
+
+/* 請求額一覧表：業者ごとの支払額（今月分）と振込先。支払額の合計を確かめる用 */
+$('btnXlPay').onclick=async function(){
+  var list=pickPay().slice().sort(sortVendor), pay=$('paySel').value;
+  if(!list.length){alertBox('出す請求書がありません。');return;}
+  var rows=xlHeader('請求額一覧表',pay,list);
+  rows[1][6]=null; rows[1][13]={v:'出力日 '+jpDate(todayIso()),k:'r'};
+  rows.push(['№','業者名','登録番号','請求日','支払日','税抜金額','消費税','支払額（今月分）','前回繰越（支払済）','今回請求額','振込先（銀行・支店）','種別','口座番号','備考'].map(function(t){return {v:t,k:'h'}}));
+  var tS=0,tT=0,tP=0,tC=0,tTot=0;
+  list.forEach(function(s,i){
+    var f=s.final, sub=(f.sub10||0)+(f.sub8||0)+(f.nontax||0), tax=(f.tax10||0)+(f.tax8||0), p=payOf(f);
+    var note=[(s.checksNg||[]).length?'検算不一致：'+s.checksNg.join('／'):'', s.memo||''].filter(Boolean).join('　');
+    rows.push([{v:i+1,k:'c'},{v:f.vendor,k:'s'},{v:f.regNo,k:'c'},{v:f.date,k:'d'},{v:normDate(dueOf(f)),k:'d'},{v:sub,k:'m'},{v:tax,k:'m'},{v:p,k:'m'},{v:f.carry,k:'m'},{v:f.total,k:'m'},
+      {v:[f.bank,f.acctName?'（'+f.acctName+'）':''].join(''),k:'s'},{v:f.acctType,k:'c'},{v:f.acctNo,k:'c'},{v:note,k:'s'}]);
+    tS+=sub; tT+=tax; tP+=p; tC+=(f.carry||0); tTot+=(f.total||0);
+  });
+  rows.push([{v:'',k:'T'},{v:'合計（'+list.length+'社）',k:'T'},{v:'',k:'T'},{v:'',k:'T'},{v:'',k:'T'},{v:tS,k:'M'},{v:tT,k:'M'},{v:tP,k:'M'},{v:tC,k:'M'},{v:tTot,k:'M'},{v:'',k:'T'},{v:'',k:'T'},{v:'',k:'T'},{v:'',k:'T'}]);
+  try{
+    var blob=await buildSheetXlsx({sheetName:'請求額一覧表',rows:rows,widths:[5,28,17,11,11,13,11,13,13,13,34,6,11,36],freezeRow:4,orientation:'landscape'});
+    await saveBlob('請求額一覧表_'+(pay?pay.replace(/-/g,''):'全件')+'.xlsx',blob);
+    $('xlNote').textContent='請求額一覧表を出しました：'+list.length+'社、支払額合計 '+fmt(tP)+' 円';
+  }catch(e){ alertBox('Excelを作れませんでした：'+(e.message||e)); }
+};
+
+/* 現場別支払先別一覧表：工事ごと・業者ごとの今月分（税抜・消費税）。原価報告書に書き写す用 */
+$('btnXlKoji').onclick=async function(){
+  var list=pickPay(), pay=$('paySel').value;
+  if(!list.length){alertBox('出す請求書がありません。');return;}
+  var by={};   // 工事 → 業者 → {sub,tax,date,summary}
+  list.forEach(function(s){
+    var f=s.final;
+    splitByKoji(f).forEach(function(p){
+      by[p.koji]=by[p.koji]||{};
+      var key=f.vendor||'（業者名なし）', r=by[p.koji][key]=by[p.koji][key]||{sub:0,tax:0,dates:[],sum:[]};
+      r.sub+=p.sub; r.tax+=p.tax; if(f.date&&r.dates.indexOf(f.date)<0) r.dates.push(f.date);
+      var sm=itemSummary(f,p.koji); if(sm) r.sum.push(sm);
+    });
+  });
+  var rows=xlHeader('現場別支払先別一覧表',pay,list);
+  rows.push(['工事№','工事名','業者名','税抜金額','消費税','税込金額','請求日','主な内容'].map(function(t){return {v:t,k:'h'}}));
+  var gS=0,gT=0, nKoji=0, unassigned=0;
+  Object.keys(by).sort(cmpKoji).forEach(function(k){
+    var kj=kojiByNo(k), name=k?(kj?kj.name:'（工事一覧に無い №'+k+'）'):'（工事未選択）';
+    var no=k&&k.charAt(0)!=='*'?k:'';
+    var vs=Object.keys(by[k]).sort(function(a,b){return normKana(a).localeCompare(normKana(b),'ja')});
+    var kS=0,kT=0; nKoji++;
+    vs.forEach(function(v,i){
+      var r=by[k][v];
+      rows.push([{v:i?'':no,k:'c'},{v:i?'':name,k:'s'},{v:v,k:'s'},{v:r.sub,k:'m'},{v:r.tax,k:'m'},{v:r.sub+r.tax,k:'m'},{v:r.dates.sort().join('、').replace(/-/g,'/'),k:'c'},{v:r.sum.join(' ／ '),k:'s'}]);
+      kS+=r.sub; kT+=r.tax;
+    });
+    rows.push([{v:'',k:'T'},{v:'',k:'T'},{v:'小計（'+vs.length+'社）',k:'T'},{v:kS,k:'M'},{v:kT,k:'M'},{v:kS+kT,k:'M'},{v:'',k:'T'},{v:'',k:'T'}]);
+    gS+=kS; gT+=kT; if(!k) unassigned+=kS+kT;
+  });
+  rows.push([]);
+  rows.push([{v:'',k:'T'},{v:'総合計（'+nKoji+'件の工事・振り先）',k:'T'},{v:'',k:'T'},{v:gS,k:'M'},{v:gT,k:'M'},{v:gS+gT,k:'M'},{v:'',k:'T'},{v:'',k:'T'}]);
+  try{
+    var blob=await buildSheetXlsx({sheetName:'現場別支払先別',rows:rows,widths:[7,32,26,13,11,13,12,44],freezeRow:4,orientation:'landscape'});
+    await saveBlob('現場別支払先別一覧表_'+(pay?pay.replace(/-/g,''):'全件')+'.xlsx',blob);
+    $('xlNote').innerHTML='現場別支払先別一覧表を出しました：'+nKoji+'件、合計 '+fmt(gS+gT)+' 円（請求額一覧表の支払額合計と同じ）'+(unassigned?'　<span class="pill ng">工事未選択 '+fmt(unassigned)+' 円</span>':'');
+  }catch(e){ alertBox('Excelを作れませんでした：'+(e.message||e)); }
 };
 
 /* ---------- 精度 ---------- */
