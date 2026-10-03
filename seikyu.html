@@ -115,6 +115,13 @@ td input{width:100%;padding:4px 6px}
 .modal{background:var(--paper);border-radius:8px;padding:18px;max-width:460px;width:100%;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow:auto}
 .empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:6px}
 /* 工事の候補リスト（入力欄の下、入らなければ上に開く） */
+.viewer iframe{display:block;width:100%;height:68vh;border:0;background:var(--paper)}
+.pdfThumb{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px;text-align:center;color:var(--ng)}
+.pdfThumb b{font-family:var(--f-num);font-size:20px}
+.pdfThumb span{font-size:10.5px;color:var(--muted);word-break:break-all;line-height:1.3}
+.folder{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.folder table td{vertical-align:middle}
+.folder tr.done td{color:var(--muted)}
 .xlbox{border:1px solid var(--accent);background:var(--accent-weak);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .combo-list{position:fixed;z-index:15;background:var(--paper);border:1px solid var(--accent);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.18);overflow-y:auto;font-size:13px}
 .combo-list div{padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
@@ -141,10 +148,27 @@ td input{width:100%;padding:4px 6px}
   <!-- 撮影・読取 -->
   <section id="p-read" class="panel">
     <div id="kojiNotice" class="notice" hidden>工事一覧がまだ入っていません。「工事一覧」タブで、工事台帳アプリから書き出したCSVを読み込むと、明細ごとに工事を自動で当てはめます。</div>
+    <div class="folder" id="folderBox" hidden>
+      <div class="row" style="justify-content:space-between">
+        <h2>フォルダから読む</h2>
+        <div class="row">
+          <button class="btn" id="fdPick" type="button">フォルダを選ぶ</button>
+          <button class="btn" id="fdReopen" type="button" hidden>前のフォルダを開く</button>
+          <button class="btn" id="fdRefresh" type="button" hidden>一覧を更新</button>
+        </div>
+      </div>
+      <p class="small muted" style="margin:0" id="fdInfo">請求書の画像（JPEG・PNG）とPDFを入れておくフォルダを選ぶと、中のファイルを一覧にします。読み取って保存したものには「保存済み」と出ます。フォルダの中のファイルは動かしたり消したりしません。</p>
+      <div class="row" id="fdActions" hidden>
+        <button class="btn primary" id="fdNext" type="button">未読を順に読む</button>
+        <button class="btn" id="fdMerge" type="button">選んだファイルを1枚の請求書として読む</button>
+        <label class="opt"><input type="checkbox" id="fdShowDone">保存済みも表示</label>
+      </div>
+      <div class="scroll" id="fdListBox" hidden style="max-height:320px;overflow-y:auto"><table><thead><tr><th></th><th>ファイル名</th><th>種類</th><th>更新日</th><th>状態</th><th></th></tr></thead><tbody id="fdBody"></tbody></table></div>
+    </div>
     <h2>1. 請求書を撮る</h2>
     <p class="small muted" style="margin:0">1枚の請求書が複数ページのときは、続けて追加してください（最大<span id="maxImg">4</span>枚）。紙全体が写るように、真上から明るい場所で撮ると精度が上がります。</p>
     <div class="row">
-      <label class="pick">📷 撮影・写真を選ぶ<input type="file" id="fileIn" accept="image/jpeg,image/png,image/webp" multiple></label>
+      <label class="pick">📷 撮影・写真／PDFを選ぶ<input type="file" id="fileIn" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" multiple></label>
       <label class="opt"><input type="checkbox" id="optSplit" checked>細かい字対策（上下に分けて拡大も送る）</label>
       <label class="opt">読取モデル
         <select id="optTier"><option value="default">標準</option><option value="complex">高精度（遅い）</option></select>
@@ -173,7 +197,7 @@ td input{width:100%;padding:4px 6px}
             <select id="pageSel"></select>
             <button class="btn sm" id="btnZoom" type="button">拡大</button>
           </div>
-          <div class="imgbox"><img id="bigImg" alt="読み取った請求書"></div>
+          <div class="imgbox"><img id="bigImg" alt="読み取った請求書"><iframe id="bigPdf" title="読み取った請求書のPDF" hidden></iframe></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
           <div class="checks" id="checks"></div>
@@ -510,16 +534,23 @@ var SRC_PILL={memory:'<span class="pill ok">記憶</span>',named:'<span class="p
 
 /* ---------- 写真 ---------- */
 var MAXIMG=4;
+function isPdf(f){ return f.type==='application/pdf'||/\.pdf$/i.test(f.name||''); }
+function addFile(f,key){
+  var pdf=isPdf(f);
+  if(pdf&&f.type!=='application/pdf') f=new File([f],f.name,{type:'application/pdf',lastModified:f.lastModified});
+  imgs.push({file:f,url:URL.createObjectURL(f),pdf:pdf,name:f.name,key:key||fileKey(f)});
+}
+function fileKey(f){ return (f.name||'')+'|'+f.size+'|'+f.lastModified; }
 $('fileIn').onchange=function(e){
   var fs=[].slice.call(e.target.files||[]);
-  fs.forEach(function(f){ if(imgs.length<MAXIMG) imgs.push({file:f,url:URL.createObjectURL(f)}) });
+  fs.forEach(function(f){ if(imgs.length<MAXIMG) addFile(f); });
   e.target.value='';
   renderThumbs();
 };
 function renderThumbs(){
   var h='';
   imgs.forEach(function(m,i){
-    h+='<div class="thumb"><img src="'+m.url+'" alt="'+(i+1)+'枚目"><span class="no">'+(i+1)+'</span><button class="x" data-i="'+i+'" aria-label="'+(i+1)+'枚目を外す">×</button></div>';
+    h+='<div class="thumb">'+(m.pdf?'<div class="pdfThumb"><b>PDF</b><span>'+esc(m.name)+'</span></div>':'<img src="'+m.url+'" alt="'+(i+1)+'枚目">')+'<span class="no">'+(i+1)+'</span><button class="x" data-i="'+i+'" aria-label="'+(i+1)+'枚目を外す">×</button></div>';
   });
   $('thumbs').innerHTML=h;
   $('thumbs').querySelectorAll('.x').forEach(function(b){
@@ -631,22 +662,28 @@ $('btnRead').onclick=async function(){
   var blobs=[], desc=[];
   try{
     setStatus('写真を準備しています…');
-    imgs.forEach(function(m,i){blobs.push(m.file); desc.push('画像'+blobs.length+'：請求書の'+(i+1)+'ページ目の全体');});
-    if(split&&blobs.length+imgs.length*2<=maxN){
+    if(aiState!=='api'&&imgs.some(function(m){return m.pdf})) throw new Error('PDFはパソコンのGitHub版（APIキー）でだけ読めます。');
+    imgs.forEach(function(m,i){
+      blobs.push(m.file);
+      desc.push(m.pdf?('資料'+blobs.length+'：請求書のPDF（'+m.name+'。全ページを読むこと）'):('資料'+blobs.length+'：請求書の'+(i+1)+'ページ目の写真（全体）'));
+    });
+    var photos=imgs.filter(function(m){return !m.pdf});
+    if(split&&photos.length&&blobs.length+photos.length*2<=maxN){
       for(var i=0;i<imgs.length;i++){
+        if(imgs[i].pdf) continue;
         var hv=await halves(imgs[i].url);
         hv.parts.forEach(function(b,k){
           blobs.push(b);
-          desc.push('画像'+blobs.length+'：'+(i+1)+'ページ目の'+(hv.portrait?(k?'下半分':'上半分'):(k?'右半分':'左半分'))+'を拡大したもの（細かい字はこちらで読む）');
+          desc.push('資料'+blobs.length+'：'+(i+1)+'ページ目の写真の'+(hv.portrait?(k?'下半分':'上半分'):(k?'右半分':'左半分'))+'を拡大したもの（細かい字はこちらで読む）');
         });
       }
     }
-  }catch(e){setStatus('写真の準備に失敗しました：'+e.message,true);return;}
+  }catch(e){setStatus('写真の準備に失敗しました：'+e.message,true);folderAuto=false;return;}
   blobs=blobs.slice(0,maxN); desc=desc.slice(0,maxN);
 
   ctl=new AbortController();
   $('btnRead').disabled=true; $('btnStop').hidden=false;
-  var t0=Date.now(), tick=setInterval(function(){setStatus('読み取り中… '+Math.round((Date.now()-t0)/1000)+'秒（写真'+blobs.length+'枚。30〜90秒ほどかかります）')},1000);
+  var t0=Date.now(), tick=setInterval(function(){setStatus('読み取り中… '+Math.round((Date.now()-t0)/1000)+'秒（'+(imgs[0]&&imgs[0].name?imgs.map(function(m){return m.name}).join('、')+'。':'')+'資料'+blobs.length+'点。30〜90秒ほどかかります）')},1000);
   setStatus('読み取り中…');
   try{
     var prompt=buildPrompt(desc.join('\n')), r;
@@ -668,7 +705,7 @@ $('btnRead').onclick=async function(){
     setStatus('読み取りました（'+cur.sec+'秒）。写真と見比べて、違う所と工事を直してから「確定して保存」を押してください。');
     showConfirm();
   }catch(e){
-    clearInterval(tick);
+    clearInterval(tick); folderAuto=false;
     if(e&&e.code==='cancelled')setStatus('中止しました。');
     else if(e&&(e.code==='api'||e.code==='net'))setStatus(e.message,true);
     else setStatus(ERRMSG[e&&e.code]||('読み取りに失敗しました。もう一度押してください。'+(e&&e.message?'（'+e.message+'）':'')),true);
@@ -700,9 +737,16 @@ async function toB64(blob){
     var d=cv.toDataURL('image/jpeg',0.85); return d.slice(d.indexOf(',')+1);
   }finally{ URL.revokeObjectURL(url); }
 }
+function rawB64(blob){ return new Promise(function(ok,ng){ var r=new FileReader(); r.onload=function(){ var d=String(r.result); ok(d.slice(d.indexOf(',')+1)); }; r.onerror=function(){ng(r.error)}; r.readAsDataURL(blob); }); }
 async function callApi(prompt,blobs,tier,signal){
   var content=[];
-  for(var i=0;i<blobs.length;i++) content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:await toB64(blobs[i])}});
+  for(var i=0;i<blobs.length;i++){
+    /* PDFはそのまま渡す（Claudeが各ページを画像と文字の両方で読む）。上限は約32MB・100ページ */
+    if(blobs[i].type==='application/pdf'){
+      if(blobs[i].size>30*1024*1024) throw {code:'api',message:'PDFが大きすぎます（30MBまで）。ページを分けて保存し直してください。'};
+      content.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:await rawB64(blobs[i])}});
+    }else content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:await toB64(blobs[i])}});
+  }
   content.push({type:'text',text:prompt});
   var res;
   try{
@@ -789,7 +833,7 @@ function showConfirm(){
   }));
   var sel='';
   imgs.forEach(function(m,i){sel+='<option value="'+i+'">'+(i+1)+'枚目</option>'});
-  $('pageSel').innerHTML=sel; $('bigImg').src=imgs[0].url;
+  $('pageSel').innerHTML=sel; showPage(0);
   $('confirmBox').hidden=false;
   refreshChecks();
   $('confirmBox').scrollIntoView({behavior:'smooth',block:'start'});
@@ -803,7 +847,12 @@ $('fForm').addEventListener('input',function(e){
   if(k==='date'&&!$('f_due').classList.contains('changed')) $('f_due').value=autoDue(normDate(v));
   refreshChecks();
 });
-$('pageSel').onchange=function(){$('bigImg').src=imgs[+this.value].url};
+function showPage(i){
+  var m=imgs[i]; if(!m)return;
+  $('bigPdf').hidden=!m.pdf; $('bigImg').hidden=!!m.pdf; $('btnZoom').hidden=!!m.pdf;
+  if(m.pdf) $('bigPdf').src=m.url; else $('bigImg').src=m.url;
+}
+$('pageSel').onchange=function(){showPage(+this.value)};
 $('btnZoom').onclick=function(){var v=$('viewer');v.classList.toggle('zoom');this.textContent=v.classList.contains('zoom')?'全体':'拡大'};
 
 function renderItems(list){
@@ -1052,7 +1101,8 @@ async function doSave(){
     changedKeys:d.changedKeys, readKeys:d.readKeys,
     checksNg:checks.filter(function(c){return c[0]==='ng'}).map(function(c){return c[1]}),
     memo:$('f_memo').value.trim(),
-    meta:{sec:cur.sec,tier:cur.tier,pages:cur.pages,sent:cur.sent,split:$('optSplit').checked,mode:aiState}
+    meta:{sec:cur.sec,tier:cur.tier,pages:cur.pages,sent:cur.sent,split:$('optSplit').checked,mode:aiState,
+      files:imgs.map(function(m){return m.key}).filter(Boolean),fileNames:imgs.map(function(m){return m.name}).filter(Boolean)}
   };
   $('btnSave').disabled=true;
   try{
@@ -1067,14 +1117,16 @@ async function doSave(){
       if(!old||old.no!==r.koji){ ALIAS[key]={no:r.koji,vendor:v.vendor,site:r.site,at:doc.savedAt}; learned++; }
     });
     if(learned) lsSetJ(LS_ALIAS,ALIAS);
-    setStatus('保存しました（'+(v.vendor||'業者名なし')+' 支払額 '+fmt(monthPart(v))+' 円）。'+(learned?'現場名の書き方を '+learned+' 件覚えました。':'')+'続けて次の請求書を撮れます。');
+    setStatus('保存しました（'+(v.vendor||'業者名なし')+' 支払額 '+fmt(monthPart(v))+' 円）。'+(learned?'現場名の書き方を '+learned+' 件覚えました。':'')+(folderAuto?'次の未読を読みます…':'続けて次の請求書を撮れます。'));
     closeConfirm(true);
+    if(fdFiles.length) renderFolder();
+    if(folderAuto) setTimeout(readNextUnread,400);   // 「未読を順に読む」中は保存したら次へ
   }catch(e){
     setStatus('保存できませんでした：'+(e&&e.message||e),true);
   }finally{$('btnSave').disabled=false;}
 }
 $('btnDiscard').onclick=function(){
-  askConfirm('保存せずに閉じますか','読み取った内容と直した所は消えます（写真も外します）。','閉じる','danger',function(){closeConfirm(true);setStatus('')},'戻る');
+  askConfirm('保存せずに閉じますか','読み取った内容と直した所は消えます（写真も外します）。','閉じる','danger',function(){folderAuto=false;closeConfirm(true);setStatus(fdFiles.length?'閉じました。「未読を順に読む」でまた続きから読めます。':'')},'戻る');
 };
 function closeConfirm(clearImgs){
   $('confirmBox').hidden=true; cur=null; rows=[];
@@ -1433,13 +1485,99 @@ function renderAcc(){
   $('accKoji').innerHTML=kh||'<tr><td colspan="4" class="muted">工事の当てはめを入れてから確定した請求書がまだありません。</td></tr>';
 }
 
+/* ---------- フォルダから読む（パソコンの Chrome・Edge。選んだフォルダは次回も覚えておく） ---------- */
+var dirHandle=null, fdFiles=[], folderAuto=false, fdSel={};
+var FD_OK=/\.(jpe?g|png|webp|pdf)$/i, FD_NG=/\.(heic|heif|tiff?|bmp|gif)$/i;
+function idb(){ return new Promise(function(ok,ng){ var r=indexedDB.open('seikyu-fs',1); r.onupgradeneeded=function(){ r.result.createObjectStore('h'); }; r.onsuccess=function(){ok(r.result)}; r.onerror=function(){ng(r.error)}; }); }
+async function idbGet(k){ try{ var d=await idb(); return await new Promise(function(ok){ var q=d.transaction('h').objectStore('h').get(k); q.onsuccess=function(){ok(q.result)}; q.onerror=function(){ok(null)}; }); }catch(e){ return null; } }
+async function idbSet(k,v){ try{ var d=await idb(); await new Promise(function(ok){ var t=d.transaction('h','readwrite'); t.objectStore('h').put(v,k); t.oncomplete=ok; t.onerror=ok; }); }catch(e){} }
+function doneMap(){
+  var m={};
+  saved.forEach(function(s){ ((s.meta&&s.meta.files)||[]).forEach(function(k){ m[k]=s; }); });
+  return m;
+}
+async function scanFolder(){
+  if(!dirHandle) return;
+  var list=[];
+  try{
+    for await (var h of dirHandle.values()){
+      if(h.kind!=='file') continue;
+      if(!FD_OK.test(h.name)&&!FD_NG.test(h.name)) continue;
+      var f=await h.getFile();
+      list.push({name:h.name,handle:h,ok:FD_OK.test(h.name),pdf:/\.pdf$/i.test(h.name),mod:f.lastModified,size:f.size,key:fileKey(f)});
+    }
+  }catch(e){ setStatus('フォルダを読めませんでした：'+(e.message||e),true); return; }
+  list.sort(function(a,b){ return a.name.localeCompare(b.name,'ja',{numeric:true}); });
+  fdFiles=list; fdSel={};
+  $('fdInfo').textContent='フォルダ「'+dirHandle.name+'」：画像・PDF '+list.length+' 件。読み取って保存したものには「保存済み」と出ます（ファイルは動かしたり消したりしません）。';
+  $('fdReopen').hidden=true; $('fdRefresh').hidden=false; $('fdActions').hidden=false; $('fdListBox').hidden=false;
+  renderFolder();
+}
+function renderFolder(){
+  var dm=doneMap(), showDone=$('fdShowDone').checked, h='', unread=0;
+  fdFiles.forEach(function(x,i){
+    var s=dm[x.key]; if(!s&&x.ok) unread++;
+    if(s&&!showDone) return;
+    var d=new Date(x.mod), ds=d.getFullYear()+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+('0'+d.getDate()).slice(-2);
+    h+='<tr class="'+(s?'done':'')+'"><td>'+(x.ok&&!s?'<input type="checkbox" data-sel="'+i+'"'+(fdSel[i]?' checked':'')+' aria-label="選ぶ">':'')+'</td>'+
+      '<td>'+esc(x.name)+'</td><td>'+(x.pdf?'PDF':x.ok?'画像':'読めない形式')+'</td><td class="n">'+ds+'</td>'+
+      '<td>'+(s?'<span class="pill ok">保存済み</span> '+esc(s.final.vendor||'')+' '+fmt(payOf(s.final))+'円':x.ok?'<span class="pill warn">未読</span>':'<span class="pill ng">JPEGかPDFで保存し直してください</span>')+'</td>'+
+      '<td>'+(x.ok?'<button class="btn sm" data-read="'+i+'" type="button">'+(s?'もう一度読む':'読む')+'</button>':'')+'</td></tr>';
+  });
+  $('fdBody').innerHTML=h||'<tr><td colspan="6" class="muted">'+(fdFiles.length?'未読のファイルはありません（「保存済みも表示」で全部見られます）。':'このフォルダに画像・PDFがありません。')+'</td></tr>';
+  $('fdNext').textContent='未読を順に読む（'+unread+'件）'; $('fdNext').disabled=!unread;
+  $('fdBody').querySelectorAll('[data-sel]').forEach(function(c){ c.onchange=function(){ if(c.checked) fdSel[c.dataset.sel]=1; else delete fdSel[c.dataset.sel]; }; });
+  $('fdBody').querySelectorAll('[data-read]').forEach(function(b){ b.onclick=function(){ folderAuto=false; loadFromFolder([fdFiles[+b.dataset.read]]); }; });
+}
+async function loadFromFolder(list){
+  if(cur&&!$('confirmBox').hidden){ alertBox('確認中の請求書があります。「確定して保存」か「保存せず閉じる」を押してから読んでください。'); folderAuto=false; return; }
+  if(!list.length) return;
+  if(list.length>MAXIMG){ alertBox('1枚の請求書としてまとめられるのは '+MAXIMG+' ファイルまでです。'); return; }
+  imgs.forEach(function(m){URL.revokeObjectURL(m.url)}); imgs=[];
+  try{ for(var i=0;i<list.length;i++){ addFile(await list[i].handle.getFile(),list[i].key); } }
+  catch(e){ setStatus('ファイルを開けませんでした：'+(e.message||e)+'（「一覧を更新」を押してください）',true); folderAuto=false; return; }
+  renderThumbs();
+  window.scrollTo({top:$('thumbs').offsetTop-80,behavior:'smooth'});
+  $('btnRead').click();
+}
+function readNextUnread(){
+  var dm=doneMap(), x=fdFiles.filter(function(f){ return f.ok&&!dm[f.key]; })[0];
+  if(!x){ folderAuto=false; renderFolder(); setStatus('このフォルダの未読はすべて読み終わりました。'); return; }
+  loadFromFolder([x]);
+}
+$('fdPick').onclick=async function(){
+  try{ dirHandle=await window.showDirectoryPicker({id:'seikyu-in',mode:'read'}); }catch(e){ return; }
+  await idbSet('dir',dirHandle); scanFolder();
+};
+$('fdReopen').onclick=async function(){
+  try{ if(await dirHandle.requestPermission({mode:'read'})==='granted') scanFolder(); }catch(e){ setStatus('前のフォルダを開けませんでした。「フォルダを選ぶ」で選び直してください。',true); }
+};
+$('fdRefresh').onclick=scanFolder;
+$('fdShowDone').onchange=renderFolder;
+$('fdNext').onclick=function(){ folderAuto=true; readNextUnread(); };
+$('fdMerge').onclick=function(){
+  var list=Object.keys(fdSel).map(function(i){return fdFiles[+i]});
+  if(list.length<1){ alertBox('一覧の左のチェックで、1枚の請求書になるファイル（2ページ目の写真など）を選んでください。'); return; }
+  folderAuto=false; loadFromFolder(list);
+};
+async function initFolder(){
+  if(window.claude||!window.showDirectoryPicker) return;   // claude.ai の中やスマホでは使えない
+  $('folderBox').hidden=false;
+  var h=await idbGet('dir'); if(!h) return;
+  dirHandle=h;
+  try{
+    if(await h.queryPermission({mode:'read'})==='granted') scanFolder();
+    else{ $('fdReopen').hidden=false; $('fdReopen').textContent='前のフォルダ「'+h.name+'」を開く'; }
+  }catch(e){}
+}
+
 /* ---------- 起動 ---------- */
 function onData(){ if(!$('p-list').hidden)renderList(); if(!$('p-acc').hidden)renderAcc(); }
 (async function(){
   saved=lsGetJ(LS_KEY,[]);
   updKojiNotice();
   setAi('wait');
-  if(!window.claude||!claude.use){ setAi(getKey()?'api':'nokey'); renderThumbs(); return; }
+  if(!window.claude||!claude.use){ setAi(getKey()?'api':'nokey'); renderThumbs(); initFolder(); return; }
   var got=await Promise.all(['sample','downloads','db'].map(function(n){return claude.use(n).catch(function(){return null})}));
   sample=got[0]; dl=got[1]; db=got[2];
   if(sample){
